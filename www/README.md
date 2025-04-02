@@ -1,38 +1,84 @@
-# sv
+<div align="center">
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+  <h1><code>wasm-pack-template</code></h1>
 
-## Creating a project
+  <strong>A template for kick starting a Rust and WebAssembly project using <a href="https://github.com/rustwasm/wasm-pack">wasm-pack</a>.</strong>
 
-If you're seeing this, you've probably already done this step. Congrats!
+  <p>
+    <a href="https://travis-ci.org/rustwasm/wasm-pack-template"><img src="https://img.shields.io/travis/rustwasm/wasm-pack-template.svg?style=flat-square" alt="Build Status" /></a>
+  </p>
 
-```bash
-# create a new project in the current directory
-npx sv create
+  <h3>
+    <a href="https://rustwasm.github.io/docs/wasm-pack/tutorials/npm-browser-packages/index.html">Tutorial</a>
+    <span> | </span>
+    <a href="https://discordapp.com/channels/442252698964721669/443151097398296587">Chat</a>
+  </h3>
 
-# create a new project in my-app
-npx sv create my-app
+  <sub>Built with 🦀🕸 by <a href="https://rustwasm.github.io/">The Rust and WebAssembly Working Group</a></sub>
+</div>
+
+## About
+
+[**📚 Read this template tutorial! 📚**][template-docs]
+
+This template is designed for compiling Rust libraries into WebAssembly and
+publishing the resulting package to NPM.
+
+Be sure to check out [other `wasm-pack` tutorials online][tutorials] for other
+templates and usages of `wasm-pack`.
+
+[tutorials]: https://rustwasm.github.io/docs/wasm-pack/tutorials/index.html
+[template-docs]: https://rustwasm.github.io/docs/wasm-pack/tutorials/npm-browser-packages/index.html
+
+## 🚴 Usage
+
+### 🐑 Use `cargo generate` to Clone this Template
+
+[Learn more about `cargo generate` here.](https://github.com/ashleygwilliams/cargo-generate)
+
+```
+cargo generate --git https://github.com/rustwasm/wasm-pack-template.git --name my-project
+cd my-project
 ```
 
-## Developing
+### 🛠️ Build with `wasm-pack build`
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+```
+wasm-pack build
 ```
 
-## Building
+### 🔬 Test in Headless Browsers with `wasm-pack test`
 
-To create a production version of your app:
-
-```bash
-npm run build
+```
+wasm-pack test --headless --firefox
 ```
 
-You can preview the production build with `npm run preview`.
+### 🎁 Publish to NPM with `wasm-pack publish`
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+```
+wasm-pack publish
+```
+
+## 🔋 Batteries Included
+
+* [`wasm-bindgen`](https://github.com/rustwasm/wasm-bindgen) for communicating
+  between WebAssembly and JavaScript.
+* [`console_error_panic_hook`](https://github.com/rustwasm/console_error_panic_hook)
+  for logging panic messages to the developer console.
+* `LICENSE-APACHE` and `LICENSE-MIT`: most Rust projects are licensed this way, so these are included for you
+
+## License
+
+Licensed under either of
+
+* Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+* MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally
+submitted for inclusion in the work by you, as defined in the Apache-2.0
+license, shall be dual licensed as above, without any additional terms or
+conditions.
