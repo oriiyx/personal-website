@@ -92,7 +92,7 @@
   }}
 />
 
-<div class="flex w-full">
+<div class="flex flex-1 items-center w-full">
   <p class="visible md:hidden">❯</p>
 
   <input

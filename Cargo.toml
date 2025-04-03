@@ -3,6 +3,7 @@ name = "peter-paravinja-personal-website"
 version = "1.0.1"
 authors = ["oriiyx <paravinja92@gmail.com>"]
 edition = "2018"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
