@@ -1,6 +1,6 @@
 [package]
-name = "personal-website"
-version = "0.1.0"
+name = "peter-paravinja-personal-website"
+version = "1.0.0"
 authors = ["oriiyx <paravinja92@gmail.com>"]
 edition = "2018"
 
@@ -29,3 +29,4 @@ wasm-bindgen-test = "0.3.34"
 [profile.release]
 # Tell `rustc` to optimize for small code size.
 opt-level = "s"
+lto = true

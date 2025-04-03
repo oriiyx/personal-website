@@ -40,19 +40,47 @@ impl CommandRegistry {
         CommandRegistry { commands }
     }
 
-    // Implement the help command
     #[wasm_bindgen]
     pub fn help(&self) -> String {
-        let mut result = String::from("Available commands: ");
-        let command_names: Vec<&String> = self.commands.keys().collect();
+        let mut result = String::from("Available commands:\n\n");
 
-        // Join the command names with commas
-        if !command_names.is_empty() {
-            result.push_str(&command_names[0]);
-            for cmd in &command_names[1..] {
-                result.push_str(", ");
-                result.push_str(cmd);
+        // Define categories with their commands
+        let categories = [
+            (
+                "General",
+                vec![
+                    "help", "banner", "clear", "exit", "whoami", "hostname", "date",
+                ],
+            ),
+            (
+                "Navigation",
+                vec!["github", "repo", "blog", "email", "linkedin"],
+            ),
+            ("Information", vec!["aboutme", "weather", "echo"]),
+            ("Projects", vec!["booktime", "bde"]),
+            ("Customization", vec!["theme", "sudo"]),
+        ];
+
+        for (category, cmds) in categories.iter() {
+            // Add category with bold formatting
+            result.push_str(&format!(
+                "<span style='font-weight: bold; color: #84c138;'>{}</span>\n",
+                category
+            ));
+
+            for cmd in cmds {
+                if let Some(desc) = self.commands.get(*cmd) {
+                    // Command name in bold, description in normal text
+                    result.push_str(&format!(
+                        "<span style='font-weight: bold;'>{}</span>{}{}\n",
+                        cmd,
+                        " ".repeat(12.max(cmd.len() + 2) - cmd.len()),
+                        desc
+                    ));
+                }
             }
+
+            result.push_str("\n");
         }
 
         result
@@ -84,7 +112,20 @@ impl CommandRegistry {
             let _ = window.open_with_url("https://booktime.co");
         }
 
-        String::from("Booktime is a mobile application for book reading tracking with book club functionality. Check out https://booktime.co for more info!")
+        String::from(
+            r#"Booktime is a mobile application for book reading tracking with book club functionality. Check out <a href="https://booktime.co" target="_blank">https://booktime.co</a> for more info!"#,
+        )
+    }
+
+    #[wasm_bindgen]
+    pub fn blog(&self) -> String {
+        if let Some(window) = window() {
+            let _ = window.open_with_url("https://oriiyx.dev");
+        }
+
+        String::from(
+            r#"Checkout my blog over at <a href="https://oriiyx.dev" target="_blank">https://oriiyx.dev</a> for more personal thoughts!"#,
+        )
     }
 
     #[wasm_bindgen]
@@ -99,21 +140,23 @@ impl CommandRegistry {
     #[wasm_bindgen]
     pub fn linkedin(&self) -> String {
         if let Some(window) = window() {
-            if let Ok(_) = window.open_with_url("https://www.linkedin.com/in/peter-paravinja/") {
-                return String::from("Opening https://www.linkedin.com/in/peter-paravinja");
-            }
+            let _ = window.open_with_url("https://www.linkedin.com/in/peter-paravinja/");
         }
-        String::from("Failed to open Linkedin profile: https://www.linkedin.com/in/peter-paravinja")
+
+        String::from(
+            r#"Opening <a href="https://www.linkedin.com/in/peter-paravinja" target="_blank">https://www.linkedin.com/in/peter-paravinja</a>"#,
+        )
     }
 
     #[wasm_bindgen]
     pub fn github(&self) -> String {
         if let Some(window) = window() {
-            if let Ok(_) = window.open_with_url("https://github.com/oriiyx") {
-                return String::from("Opening https://github.com/oriiyx");
-            }
+            let _ = window.open_with_url("https://github.com/oriiyx");
         }
-        String::from("Failed to open GitHub profile.")
+
+        String::from(
+            r#"Opening <a href="https://github.com/oriiyx" target="_blank">https://github.com/oriiyx</a>"#,
+        )
     }
 
     #[wasm_bindgen]
@@ -217,37 +260,38 @@ Type 'help' to see list of available commands.
             version
         )
     }
+
     #[wasm_bindgen]
     pub fn aboutme(&self) -> String {
         r#"
-Hey there! I'm Peter Paravinja, a full-stack developer with 6 years of experience in building
+<span style='font-weight: bold; color: #84c138;'>Hey there! I'm Peter Paravinja</span>, a full-stack developer with 6 years of experience in building
 complex web applications and a bit of mobile development.
 
-CURRENT WORK:
+<span style='font-weight: bold;'>CURRENT WORK</span>:
 - Working at Netis on cryptographic applications, passkey technology while tackling infrastructure problems
 - Developing SQLC port for PHP and MySQL (rewritten in Rust)
 - Creating interactive CLI-based tools and applications
 
-SKILLS:
+<span style='font-weight: bold;'>SKILLS</span>:
 - Languages: Golang, JavaScript/TypeScript, Rust, PHP, Python
 - Full development cycle: from design to deployment and marketing
 - Solo developed Booktime.co, a book reading tracking app with book club functionality
 
-PROJECTS:
+<span style='font-weight: bold;'>PROJECTS</span>:
 - Booktime.co: A social book-tracking platform with book club features
   (React Native, Remix, Golang, infrastructure, design, marketing)
 - Use 'booktime' command for more info!
 - Use 'bde' command for more info!
 
-CONNECT:
-- Website: https://oriiyx.dev/
-- LinkedIn: https://www.linkedin.com/in/peter-paravinja/
-- GitHub: https://github.com/oriiyx
+<span style='font-weight: bold;'>CONNECT</span>:
+- Website: <a href="https://oriiyx.dev/" target="_blank">https://oriiyx.dev/</a>
+- LinkedIn: <a href="https://www.linkedin.com/in/peter-paravinja/" target="_blank">https://www.linkedin.com/in/peter-paravinja/</a>
+- GitHub: <a href="https://github.com/oriiyx" target="_blank">https://github.com/oriiyx</a>
 
 I'm always looking for new challenges and opportunities to improve my skills.
 Feel free to reach out via LinkedIn or GitHub if you'd like to connect!
 "#
-        .to_string()
+            .to_string()
     }
 
     #[wasm_bindgen]

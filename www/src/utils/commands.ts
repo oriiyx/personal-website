@@ -13,6 +13,7 @@ export const commands: Record<string, (args: string[]) => Promise<string> | stri
 	aboutme: () => commandRegistry.aboutme(),
 	booktime: () => commandRegistry.booktime(),
 	bde: () => commandRegistry.bde(),
+	blog: () => commandRegistry.blog(),
 	linkedin: () => commandRegistry.linkedin(),
 	date: () => commandRegistry.date(),
 	echo: (args: string[]) => commandRegistry.echo(args),
