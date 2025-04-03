@@ -101,6 +101,7 @@
     aria-label="Command input"
     class="w-full px-2 bg-transparent outline-none"
     type="text"
+    autocomplete="off"
     style={`color: ${$theme.foreground}`}
     bind:value={command}
     on:keydown={handleKeyDown}

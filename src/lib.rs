@@ -1,27 +1,25 @@
-extern crate cfg_if;
-extern crate wasm_bindgen;
-
 mod utils;
+mod commands;
 
 use cfg_if::cfg_if;
 use wasm_bindgen::prelude::*;
 
+// Re-export the CommandRegistry
+pub use commands::CommandRegistry;
+
+// Set up panic hook
 cfg_if! {
-// When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
-// allocator.
-if #[cfg(feature = "wee_alloc")] {
-    extern crate wee_alloc;
-    #[global_allocator]
-    static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-}
-}
-
-#[wasm_bindgen]
-extern "C" {
-    fn alert(s: &str);
+    if #[cfg(feature = "console_error_panic_hook")] {
+        extern crate console_error_panic_hook;
+        // use console_error_panic_hook::set_once as set_panic_hook;
+    } else {
+        #[inline]
+        fn set_panic_hook() {}
+    }
 }
 
-#[wasm_bindgen]
-pub fn greet(name: &str) -> String {
-    format!("Hello from Rust, {}!", name)
+// Initialize function to set up things like panic hook
+#[wasm_bindgen(start)]
+pub fn init() {
+    utils::set_panic_hook();
 }

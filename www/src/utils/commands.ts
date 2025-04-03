@@ -2,24 +2,22 @@ import packageJson from '../../package.json';
 import themes from '../../themes.json';
 import { history } from '../stores/history';
 import { theme } from '../stores/theme';
+import { CommandRegistry } from '../../../pkg/personal_website';
 
-const hostname = window.location.hostname;
+const commandRegistry = new CommandRegistry();
 
 export const commands: Record<string, (args: string[]) => Promise<string> | string> = {
-	help: () => 'Available commands: ' + Object.keys(commands).join(', '),
-	hostname: () => hostname,
-	whoami: () => 'guest',
-	date: () => new Date().toLocaleString(),
-	echo: (args: string[]) => args.join(' '),
-	github: () => {
-		window.open('https://github.com/oriiyx');
-		return 'Opening https://github.com/oriiyx.';
-	},
-	sudo: (args: string[]) => {
-		window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
-
-		return `Permission denied: unable to run the command '${args[0]}' as root.`;
-	},
+	help: () => commandRegistry.help(),
+	hostname: () => commandRegistry.hostname(),
+	whoami: () => commandRegistry.whoami(),
+	aboutme: () => commandRegistry.aboutme(),
+	booktime: () => commandRegistry.booktime(),
+	bde: () => commandRegistry.bde(),
+	linkedin: () => commandRegistry.linkedin(),
+	date: () => commandRegistry.date(),
+	echo: (args: string[]) => commandRegistry.echo(args),
+	github: () => commandRegistry.github(),
+	sudo: (args: string[]) => commandRegistry.sudo(args),
 	theme: (args: string[]) => {
 		const usage = `Usage: theme [args].
     [args]:
@@ -64,43 +62,14 @@ export const commands: Record<string, (args: string[]) => Promise<string> | stri
 			}
 		}
 	},
-	repo: () => {
-		window.open(packageJson.repository.url, '_blank');
-
-		return 'Opening repository...';
-	},
+	repo: () => commandRegistry.repo(packageJson.repository.url),
 	clear: () => {
 		history.set([]);
 
 		return '';
 	},
-	email: () => {
-		window.open(`mailto:${packageJson.author.email}`);
-
-		return `Opening mailto:${packageJson.author.email}...`;
-	},
-	weather: async (args: string[]) => {
-		const city = args.join('+');
-
-		if (!city) {
-			return 'Usage: weather [city]. Example: weather Brussels';
-		}
-
-		const weather = await fetch(`https://wttr.in/${city}?ATm`);
-
-		return weather.text();
-	},
-	exit: () => {
-		return 'Please close the tab to exit.';
-	},
-	banner: () => `
-██████╗ ███████╗████████╗███████╗██████╗     ██████╗ 
-██╔══██╗██╔════╝╚══██╔══╝██╔════╝██╔══██╗    ██╔══██╗
-██████╔╝█████╗     ██║   █████╗  ██████╔╝    ██████╔╝
-██╔═══╝ ██╔══╝     ██║   ██╔══╝  ██╔══██╗    ██╔═══╝ 
-██║     ███████╗   ██║   ███████╗██║  ██║    ██║██╗  
-╚═╝     ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝    ╚═╝╚═╝  v${packageJson.version}
-
-Type 'help' to see list of available commands.
-`
+	email: () => commandRegistry.email(packageJson.author.email),
+	weather: async (args: string[]) => commandRegistry.weather(args),
+	banner: () => commandRegistry.banner(packageJson.version),
+	exit: () => commandRegistry.exit()
 };
