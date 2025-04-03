@@ -1,84 +1,52 @@
-<div align="center">
+# 🖥️ Peter Paravinja's Interactive Terminal Portfolio
 
-  <h1><code>wasm-pack-template</code></h1>
+## 🚀 Project Overview
 
-  <strong>A template for kick starting a Rust and WebAssembly project using <a href="https://github.com/rustwasm/wasm-pack">wasm-pack</a>.</strong>
+Welcome to my unique portfolio experience! This is not your typical website - it's an interactive terminal-like web application built with Rust WebAssembly (WASM) and Svelte, designed to showcase my skills, projects, and personality in a developer-friendly, terminal-inspired interface.
 
-  <p>
-    <a href="https://travis-ci.org/rustwasm/wasm-pack-template"><img src="https://img.shields.io/travis/rustwasm/wasm-pack-template.svg?style=flat-square" alt="Build Status" /></a>
-  </p>
+## ✨ Features
 
-  <h3>
-    <a href="https://rustwasm.github.io/docs/wasm-pack/tutorials/npm-browser-packages/index.html">Tutorial</a>
-    <span> | </span>
-    <a href="https://discordapp.com/channels/442252698964721669/443151097398296587">Chat</a>
-  </h3>
+- 💻 Fully interactive terminal simulation
+- 🦀 Powered by Rust WebAssembly for high performance
+- 🌈 Multiple theme support
+- 📋 Quick access to personal info, projects, and contact details
+- 🚀 Simulated command-line experience
 
-  <sub>Built with 🦀🕸 by <a href="https://rustwasm.github.io/">The Rust and WebAssembly Working Group</a></sub>
-</div>
+## 🛠 Technologies Used
 
-## About
+- **Frontend**: Svelte
+- **Backend**: Rust (WebAssembly)
+- **Styling**: Tailwind CSS
+- **Themes**: Dynamic theme switching
 
-[**📚 Read this template tutorial! 📚**][template-docs]
+## 🎮 Available Commands
 
-This template is designed for compiling Rust libraries into WebAssembly and
-publishing the resulting package to NPM.
+Try out these commands to explore my portfolio:
 
-Be sure to check out [other `wasm-pack` tutorials online][tutorials] for other
-templates and usages of `wasm-pack`.
+- `help`: Display all available commands
+- `aboutme`: Learn more about my background
+- `booktime`: Check out my book tracking app
+- `github`: Visit my GitHub profile
+- `linkedin`: Connect on LinkedIn
+- `theme`: Switch between different terminal themes
+- `...`: and even more!
 
-[tutorials]: https://rustwasm.github.io/docs/wasm-pack/tutorials/index.html
-[template-docs]: https://rustwasm.github.io/docs/wasm-pack/tutorials/npm-browser-packages/index.html
+## 🌐 Deployment
 
-## 🚴 Usage
+The site is deployed and can be accessed at: [https://peter-paravinja.me](https://peter-paravinja.me)
 
-### 🐑 Use `cargo generate` to Clone this Template
+## 🤝 Contributing
 
-[Learn more about `cargo generate` here.](https://github.com/ashleygwilliams/cargo-generate)
+Contributions, issues, and feature requests are welcome! Feel free to check [issues page](https://github.com/oriiyx/personal-website/issues).
 
-```
-cargo generate --git https://github.com/rustwasm/wasm-pack-template.git --name my-project
-cd my-project
-```
+## 🙏 Credits and Inspiration
 
-### 🛠️ Build with `wasm-pack build`
+This project was heavily inspired by and adapted from the amazing work of [@m4tt72's terminal portfolio](https://github.com/m4tt72/terminal). Special thanks to the original creator for the innovative concept and implementation.
 
-```
-wasm-pack build
-```
+## 👨‍💻 About Me
 
-### 🔬 Test in Headless Browsers with `wasm-pack test`
+I'm Peter Paravinja, a full-stack developer passionate about creating fun web and mobile applications. This portfolio is a reflection of my love for creative coding and developer experience.
 
-```
-wasm-pack test --headless --firefox
-```
+---
 
-### 🎁 Publish to NPM with `wasm-pack publish`
-
-```
-wasm-pack publish
-```
-
-## 🔋 Batteries Included
-
-* [`wasm-bindgen`](https://github.com/rustwasm/wasm-bindgen) for communicating
-  between WebAssembly and JavaScript.
-* [`console_error_panic_hook`](https://github.com/rustwasm/console_error_panic_hook)
-  for logging panic messages to the developer console.
-* `LICENSE-APACHE` and `LICENSE-MIT`: most Rust projects are licensed this way, so these are included for you
-
-## License
-
-Licensed under either of
-
-* Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-* MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
-
-### Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally
-submitted for inclusion in the work by you, as defined in the Apache-2.0
-license, shall be dual licensed as above, without any additional terms or
-conditions.
+Made with 🦀 Rust, ✨ Svelte, and ❤️ by Peter Paravinja

@@ -1,8 +1,8 @@
+import { CommandRegistry } from 'peter-paravinja-personal-website';
 import packageJson from '../../package.json';
 import themes from '../../themes.json';
 import { history } from '../stores/history';
 import { theme } from '../stores/theme';
-import { CommandRegistry } from '../../../pkg/personal_website';
 
 const commandRegistry = new CommandRegistry();
 

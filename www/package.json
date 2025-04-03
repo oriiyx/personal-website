@@ -39,5 +39,8 @@
   },
   "engines": {
     "node": ">=18.17.0"
+  },
+  "dependencies": {
+    "peter-paravinja-personal-website": "^1.0.1"
   }
 }

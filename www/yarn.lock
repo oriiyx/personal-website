@@ -1065,6 +1065,11 @@ periscopic@^3.1.0:
     estree-walker "^3.0.0"
     is-reference "^3.0.0"
 
+peter-paravinja-personal-website@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/peter-paravinja-personal-website/-/peter-paravinja-personal-website-1.0.1.tgz#e0ac5c0a21d1aa4e0bfe33d36143e52e31a6f111"
+  integrity sha512-2Jt+JC5IySrze8VhdOLwYT22GssIugMfe4w0TEMkiKvrJ68mN/9js/eXpxkntISOCOjal7vNgHN3pmTh1QpImg==
+
 picocolors@^1.0.0, picocolors@^1.1.1:
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/picocolors/-/picocolors-1.1.1.tgz#3d321af3eab939b083c8f929a1d12cda81c26b6b"
