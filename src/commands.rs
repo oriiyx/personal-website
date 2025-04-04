@@ -97,13 +97,9 @@ impl CommandRegistry {
 
     #[wasm_bindgen]
     pub fn date(&self) -> String {
-        let now = Date::new_0(); // Use new_0() which is the constructor with no arguments
-        let locale_string = Date::to_locale_string(
-            &now,
-            &"",                   // Empty string for default locale
-            &JsValue::undefined(), // No options
-        );
-        locale_string.into() // Convert JsString to String
+        let now = Date::new_0();
+        let date_string = now.to_string();
+        date_string.into()
     }
 
     #[wasm_bindgen]
