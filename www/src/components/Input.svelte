@@ -36,7 +36,7 @@
         track(commandName, ...args);
       }
 
-      const commandFunction = commands[commandName];
+      const commandFunction = commands[commandName.toLowerCase()];
 
       if (commandFunction) {
         const output = await commandFunction(args);
@@ -102,6 +102,7 @@
     class="w-full px-2 bg-transparent outline-none"
     type="text"
     autocomplete="off"
+    autocapitalize="none"
     style={`color: ${$theme.foreground}`}
     bind:value={command}
     on:keydown={handleKeyDown}
