@@ -1,7 +1,7 @@
 [package]
 name = "peter-paravinja-personal-website"
 description = "Personal website. Tech combination of Rust WASM + Svetle for the frontend. Imitating terminal as a UI."
-version = "1.0.2"
+version = "1.0.3"
 authors = ["oriiyx <paravinja92@gmail.com>"]
 edition = "2018"
 license = "MIT"

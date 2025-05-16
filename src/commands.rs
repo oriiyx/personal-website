@@ -116,11 +116,11 @@ impl CommandRegistry {
     #[wasm_bindgen]
     pub fn blog(&self) -> String {
         if let Some(window) = window() {
-            let _ = window.open_with_url("https://oriiyx.dev");
+            let _ = window.open_with_url("https://dev.to/oriiyx");
         }
 
         String::from(
-            r#"Checkout my blog over at <a href="https://oriiyx.dev" target="_blank">https://oriiyx.dev</a> for more personal thoughts!"#,
+            r#"Checkout my blog over at <a href="https://dev.to/oriiyx" target="_blank">https://dev.to/oriiyx</a> for more personal thoughts!"#,
         )
     }
 
@@ -280,7 +280,7 @@ complex web applications and a bit of mobile development.
 - Use 'bde' command for more info!
 
 <span style='font-weight: bold;'>CONNECT</span>:
-- Website: <a href="https://oriiyx.dev/" target="_blank">https://oriiyx.dev/</a>
+- Blog: <a href="https://oriiyx.dev/" target="_blank">https://dev.to/oriiyx/</a>
 - LinkedIn: <a href="https://www.linkedin.com/in/peter-paravinja/" target="_blank">https://www.linkedin.com/in/peter-paravinja/</a>
 - GitHub: <a href="https://github.com/oriiyx" target="_blank">https://github.com/oriiyx</a>
 

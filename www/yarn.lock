@@ -1065,10 +1065,10 @@ periscopic@^3.1.0:
     estree-walker "^3.0.0"
     is-reference "^3.0.0"
 
-peter-paravinja-personal-website@^1.0.2:
-  version "1.0.2"
-  resolved "https://registry.yarnpkg.com/peter-paravinja-personal-website/-/peter-paravinja-personal-website-1.0.2.tgz#f716568224517f2560104d2d10dba76337a6aed7"
-  integrity sha512-oo3DDrovuwNQUGcFHRijK+EVanRhtkcHwURb90jNk7Q0ozKF0fdPmWKQLjpKhYf10mtNBPMsyuIW9CFkWcmqEw==
+peter-paravinja-personal-website@^1.0.3:
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/peter-paravinja-personal-website/-/peter-paravinja-personal-website-1.0.3.tgz#06b1e8d7db878da34417cf0551df6f120c861362"
+  integrity sha512-3B2ffJQRC3KwnMkex3aIII+HGL9wdg1oWJzdwwTbyLXl18DIGXUjYKc1qi7/LrfL4aokwHu8tDKZXbDtWnFpDA==
 
 picocolors@^1.0.0, picocolors@^1.1.1:
   version "1.1.1"
@@ -1142,6 +1142,11 @@ postcss@^8.4.41, postcss@^8.4.43, postcss@^8.4.47:
     nanoid "^3.3.8"
     picocolors "^1.1.1"
     source-map-js "^1.2.1"
+
+prettier@3.5.3:
+  version "3.5.3"
+  resolved "https://registry.yarnpkg.com/prettier/-/prettier-3.5.3.tgz#4fc2ce0d657e7a02e602549f053b239cb7dfe1b5"
+  integrity sha512-QQtaxnoDJeAkDvDKWCLiwIXkTgRhwYDEQCghU9Z6q03iyek/rxRh/2lC3HB7P8sWT2xC/y5JDctPLBIGzHKbhw==
 
 queue-microtask@^1.2.2:
   version "1.2.3"

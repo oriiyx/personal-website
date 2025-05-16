@@ -6,106 +6,115 @@
   import { track } from '../utils/tracking';
 
   let command = '';
-  let historyIndex = -1;
+	let historyIndex = -1;
 
-  let input: HTMLInputElement;
+	let input: HTMLInputElement;
 
-  onMount(() => {
-    input.focus();
+	onMount(() => {
+		input.focus();
 
-    if ($history.length === 0) {
-      const command = commands['banner'] as () => string;
+		if ($history.length === 0) {
+			const command = commands['banner'] as () => string;
 
-      if (command) {
-        const output = command();
+			if (command) {
+				const output = command();
 
-        $history = [...$history, { command: 'banner', outputs: [output] }];
-      }
-    }
-  });
+				$history = [...$history, { command: 'banner', outputs: [output] }];
+			}
+		}
+	});
 
-  afterUpdate(() => {
-    input.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  });
+	afterUpdate(() => {
+		input.scrollIntoView({ behavior: 'smooth', block: 'end' });
+	});
 
-  const handleKeyDown = async (event: KeyboardEvent) => {
-    if (event.key === 'Enter') {
-      const [commandName, ...args] = command.split(' ');
+	const handleKeyDown = async (event: KeyboardEvent) => {
+		if (event.key === 'Enter') {
+			if (command.trim() === '') {
+				const output = ``;
 
-      if (import.meta.env.VITE_TRACKING_ENABLED === 'true') {
-        track(commandName, ...args);
-      }
+				$history = [...$history, { command, outputs: [output] }];
+				command = '';
+				return;
+			}
 
-      const commandFunction = commands[commandName.toLowerCase()];
+			const [commandName, ...args] = command.split(' ');
 
-      if (commandFunction) {
-        const output = await commandFunction(args);
+			if (import.meta.env.VITE_TRACKING_ENABLED === 'true') {
+				track(commandName, ...args);
+			}
 
-        if (commandName !== 'clear') {
-          $history = [...$history, { command, outputs: [output] }];
-        }
-      } else {
-        const output = `${commandName}: command not found`;
 
-        $history = [...$history, { command, outputs: [output] }];
-      }
+			const commandFunction = commands[commandName.toLowerCase()];
 
-      command = '';
-    } else if (event.key === 'ArrowUp') {
-      if (historyIndex < $history.length - 1) {
-        historyIndex++;
+			if (commandFunction) {
+				const output = await commandFunction(args);
 
-        command = $history[$history.length - 1 - historyIndex].command;
-      }
+				if (commandName !== 'clear') {
+					$history = [...$history, { command, outputs: [output] }];
+				}
+			} else {
+				const output = `${commandName}: command not found`;
 
-      event.preventDefault();
-    } else if (event.key === 'ArrowDown') {
-      if (historyIndex > -1) {
-        historyIndex--;
-        command =
-          historyIndex >= 0
-            ? $history[$history.length - 1 - historyIndex].command
-            : '';
-      }
-      event.preventDefault();
-    } else if (event.key === 'Tab') {
-      event.preventDefault();
+				$history = [...$history, { command, outputs: [output] }];
+			}
 
-      const autoCompleteCommand = Object.keys(commands).find((cmd) =>
-        cmd.startsWith(command),
-      );
+			command = '';
+		} else if (event.key === 'ArrowUp') {
+			if (historyIndex < $history.length - 1) {
+				historyIndex++;
 
-      if (autoCompleteCommand) {
-        command = autoCompleteCommand;
-      }
-    } else if (event.ctrlKey && event.key === 'l') {
-      event.preventDefault();
+				command = $history[$history.length - 1 - historyIndex].command;
+			}
 
-      $history = [];
-    }
-  };
+			event.preventDefault();
+		} else if (event.key === 'ArrowDown') {
+			if (historyIndex > -1) {
+				historyIndex--;
+				command =
+					historyIndex >= 0
+						? $history[$history.length - 1 - historyIndex].command
+						: '';
+			}
+			event.preventDefault();
+		} else if (event.key === 'Tab') {
+			event.preventDefault();
+
+			const autoCompleteCommand = Object.keys(commands).find((cmd) =>
+				cmd.startsWith(command)
+			);
+
+			if (autoCompleteCommand) {
+				command = autoCompleteCommand;
+			}
+		} else if (event.ctrlKey && event.key === 'l') {
+			event.preventDefault();
+
+			$history = [];
+		}
+	};
 </script>
 
 <svelte:window
-  on:click={() => {
+	on:click={() => {
     input.focus();
   }}
 />
 
 <div class="flex flex-1 items-center w-full">
-  <p class="visible md:hidden">❯</p>
+	<p class="visible md:hidden">❯</p>
 
-  <input
-    id="command-input"
-    name="command-input"
-    aria-label="Command input"
-    class="w-full px-2 bg-transparent outline-none"
-    type="text"
-    autocomplete="off"
-    autocapitalize="none"
-    style={`color: ${$theme.foreground}`}
-    bind:value={command}
-    on:keydown={handleKeyDown}
-    bind:this={input}
-  />
+	<input
+		id="command-input"
+		name="command-input"
+		aria-label="Command input"
+		class="w-full px-2 bg-transparent outline-none"
+		type="text"
+		autocomplete="off"
+		autocapitalize="none"
+		style={`color: ${$theme.foreground}`}
+		bind:value={command}
+		on:keydown={handleKeyDown}
+		bind:this={input}
+	/>
 </div>
