@@ -1,0 +1,1669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Data-Oriented Design — Memory Layout & Cache Mechanics</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+
+          /* Data-group colors */
+          --pos: #f06565; /* position / hot data */
+          --vel: #3d9be8; /* velocity */
+          --hp: #4dc462; /* health / gameplay */
+          --name: #e8b834; /* name / cold data */
+          --tex: #c084fc; /* texture / cold data */
+          --pad: #3b4058; /* padding bytes */
+
+          /* Semantic */
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+          --hit: #f06565;
+          --miss: rgba(240, 101, 101, 0.15);
+          --used: rgba(77, 196, 98, 0.12);
+          --wasted: rgba(240, 101, 101, 0.08);
+      }
+
+      * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+      }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      .page {
+          max-width: 860px;
+          margin: 0 auto;
+          padding: 48px 24px 100px;
+      }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      /* ── Tabs ── */
+      .tab-bar {
+          display: flex;
+          gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+      }
+
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+
+      .tab-btn:hover {
+          color: var(--text);
+          background: var(--surface2);
+      }
+
+      .tab-btn.active {
+          color: #fff;
+          background: var(--accent);
+      }
+
+      .tab-panel {
+          display: none;
+      }
+
+      .tab-panel.active {
+          display: block;
+          animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn {
+          from {
+              opacity: 0;
+              transform: translateY(6px);
+          }
+          to {
+              opacity: 1;
+              transform: translateY(0);
+          }
+      }
+
+      /* ── Prose ── */
+      .section {
+          margin-bottom: 40px;
+      }
+
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .section p {
+          margin-bottom: 14px;
+      }
+
+      .section p:last-child {
+          margin-bottom: 0;
+      }
+
+      strong {
+          color: var(--text-b);
+          font-weight: 600;
+      }
+
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      /* ── Diagrams ── */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* ── Memory layout blocks ── */
+      .mem-row {
+          display: flex;
+          align-items: center;
+          margin-bottom: 3px;
+      }
+
+      .mem-lbl {
+          width: 130px;
+          flex-shrink: 0;
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          text-align: right;
+          padding-right: 14px;
+      }
+
+      .mem-cells {
+          display: flex;
+          gap: 1px;
+      }
+
+      .mc {
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          border-radius: 2px;
+          min-width: 26px;
+          padding: 0 2px;
+      }
+
+      .mc.w1 {
+          width: 26px;
+      }
+
+      .mc.w2 {
+          width: 53px;
+      }
+
+      .mc.w4 {
+          width: 107px;
+      }
+
+      .mc.w8 {
+          width: 215px;
+      }
+
+      .mc.pos {
+          background: rgba(240, 101, 101, 0.09);
+          color: var(--pos);
+      }
+
+      .mc.vel {
+          background: rgba(61, 155, 232, 0.09);
+          color: var(--vel);
+      }
+
+      .mc.hp {
+          background: rgba(77, 196, 98, 0.09);
+          color: var(--hp);
+      }
+
+      .mc.name {
+          background: rgba(232, 184, 52, 0.09);
+          color: var(--name);
+      }
+
+      .mc.tex {
+          background: rgba(192, 132, 252, 0.09);
+          color: var(--tex);
+      }
+
+      .mc.pad {
+          background: rgba(59, 64, 88, 0.15);
+          color: var(--pad);
+      }
+
+      .mc.empty {
+          background: rgba(59, 64, 88, 0.06);
+          color: #252a3a;
+      }
+
+      .msep {
+          width: 8px;
+          flex-shrink: 0;
+      }
+
+      /* cache-line overlay */
+      .cache-line-bracket {
+          display: flex;
+          align-items: center;
+          margin-top: 6px;
+          margin-bottom: 2px;
+      }
+
+      .cl-spacer {
+          width: 130px;
+          flex-shrink: 0;
+      }
+
+      .cl-bar {
+          height: 3px;
+          border-radius: 2px;
+          position: relative;
+      }
+
+      .cl-label {
+          font-family: var(--mono);
+          font-size: 9px;
+          margin-left: 8px;
+          white-space: nowrap;
+      }
+
+      /* ── Latency tower ── */
+      .lat-bar-wrap {
+          margin-bottom: 10px;
+      }
+
+      .lat-label {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-bottom: 4px;
+          display: flex;
+          justify-content: space-between;
+      }
+
+      .lat-label span:last-child {
+          color: var(--text-b);
+          font-weight: 600;
+      }
+
+      .lat-bar {
+          height: 22px;
+          border-radius: 3px;
+          position: relative;
+          display: flex;
+          align-items: center;
+      }
+
+      .lat-bar .lat-val {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          padding-left: 8px;
+      }
+
+      /* ── Codeblock ── */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+          white-space: pre;
+      }
+
+      .codeblock .kw {
+          color: var(--accent2);
+      }
+
+      .codeblock .cm {
+          color: var(--text-dim);
+          font-style: italic;
+      }
+
+      .codeblock .tp {
+          color: #e599f7;
+      }
+
+      .codeblock .num {
+          color: var(--name);
+      }
+
+      .codeblock .str {
+          color: var(--hp);
+      }
+
+      .codeblock .fn {
+          color: var(--vel);
+      }
+
+      /* ── Callout ── */
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+
+      .callout.good {
+          background: rgba(77, 196, 98, 0.06);
+          border-color: rgba(77, 196, 98, 0.14);
+      }
+
+      /* ── Table ── */
+      .tbl-wrap {
+          overflow-x: auto;
+          margin: 16px 0;
+      }
+
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+      }
+
+      tr:last-child td {
+          border-bottom: none;
+      }
+
+      /* colored text */
+      .cpos {
+          color: var(--pos);
+      }
+
+      .cvel {
+          color: var(--vel);
+      }
+
+      .chp {
+          color: var(--hp);
+      }
+
+      .cname {
+          color: var(--name);
+      }
+
+      .ctex {
+          color: var(--tex);
+      }
+
+      .cdim {
+          color: var(--text-dim);
+      }
+
+      .cacc {
+          color: var(--accent2);
+      }
+
+      /* ── Comparison columns ── */
+      .compare {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+          margin: 16px 0;
+      }
+
+      .compare > div {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 20px;
+          overflow-x: auto;
+      }
+
+      .compare-label {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          margin-bottom: 14px;
+      }
+
+      /* ── Stat cards ── */
+      .stat-row {
+          display: flex;
+          gap: 12px;
+          margin: 16px 0;
+          flex-wrap: wrap;
+      }
+
+      .stat-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 14px 18px;
+          text-align: center;
+          flex: 1;
+          min-width: 120px;
+      }
+
+      .stat-card .sv {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+      }
+
+      .stat-card .sl {
+          font-family: var(--mono);
+          font-size: 9px;
+          color: var(--text-dim);
+          margin-top: 4px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+      }
+
+      /* flow arrow */
+      .flow-arrow {
+          text-align: center;
+          color: var(--text-xdim);
+          font-size: 18px;
+          padding: 6px 0;
+          font-family: var(--mono);
+      }
+
+      .scroll-hint {
+          min-width: 580px;
+      }
+
+      /* divider */
+      .divider-row {
+          display: flex;
+          align-items: center;
+          margin: 8px 0;
+      }
+
+      .div-lbl {
+          width: 130px;
+          flex-shrink: 0;
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          color: var(--accent);
+          text-align: right;
+          padding-right: 14px;
+      }
+
+      .div-line {
+          flex: 1;
+          height: 1px;
+          background: var(--border);
+      }
+
+      @media (max-width: 700px) {
+          .compare {
+              grid-template-columns: 1fr;
+          }
+
+          .mem-lbl, .cl-spacer {
+              width: 80px;
+              font-size: 9px;
+          }
+
+          .tab-btn {
+              font-size: 10px;
+              padding: 7px 10px;
+          }
+
+          .mc {
+              min-width: 20px;
+              font-size: 9px;
+          }
+
+          .mc.w4 {
+              width: 83px;
+          }
+
+          .mc.w8 {
+              width: 167px;
+          }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<div class="page-header">
+		<h1>data-oriented design: memory &amp; caches</h1>
+		<div class="sub">why memory layout determines performance · AoS vs SoA · cache lines · hot/cold splitting</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="problem">The Problem</button>
+		<button class="tab-btn" data-tab="cache">Cache Mechanics</button>
+		<button class="tab-btn" data-tab="aos">AoS Layout</button>
+		<button class="tab-btn" data-tab="soa">The SoA Transform</button>
+		<button class="tab-btn" data-tab="hotcold">Hot/Cold Splitting</button>
+		<button class="tab-btn" data-tab="practice">In Practice</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE PROBLEM                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-problem">
+
+		<div class="section">
+			<h2>The performance cliff you don't see in a profiler</h2>
+
+			<p>You've written a game loop that updates 100,000 entities. You profile it. The hotspot is your update function —
+				but the CPU isn't doing complex math. It's <strong>waiting for memory</strong>. The instructions are fast; the
+				data they need isn't here yet.</p>
+
+			<p>This is the fundamental problem Data-Oriented Design addresses. Modern CPUs can execute billions of operations
+				per second, but fetching a single cache line from main memory costs <strong>~100 nanoseconds</strong> — enough
+				time for the CPU to have executed 200–400 instructions. Every time your code touches memory that isn't already
+				in cache, the CPU stalls.</p>
+
+			<p>Object-Oriented Design organizes code around types and inheritance hierarchies. Data-Oriented Design organizes
+				code around <strong>how data flows through memory</strong> — because that's what actually determines performance
+				at scale.</p>
+		</div>
+
+		<div class="section">
+			<h2>The cost of a cache miss — real numbers</h2>
+
+			<p>On a typical modern x86 CPU (Zen 4, Raptor Lake era):</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Memory hierarchy latency</div>
+
+				<div class="lat-bar-wrap">
+					<div class="lat-label"><span>L1 cache hit</span><span>~1 ns  (4 cycles)</span></div>
+					<div class="lat-bar" style="width: 3%; background: rgba(77,196,98,0.25);">
+						<span class="lat-val" style="color:var(--hp);"></span>
+					</div>
+				</div>
+				<div class="lat-bar-wrap">
+					<div class="lat-label"><span>L2 cache hit</span><span>~4 ns  (12 cycles)</span></div>
+					<div class="lat-bar" style="width: 8%; background: rgba(61,155,232,0.25);">
+						<span class="lat-val" style="color:var(--vel);"></span>
+					</div>
+				</div>
+				<div class="lat-bar-wrap">
+					<div class="lat-label"><span>L3 cache hit</span><span>~12 ns  (40 cycles)</span></div>
+					<div class="lat-bar" style="width: 18%; background: rgba(232,184,52,0.25);">
+						<span class="lat-val" style="color:var(--name);"></span>
+					</div>
+				</div>
+				<div class="lat-bar-wrap">
+					<div class="lat-label"><span>Main memory (DRAM)</span><span>~100 ns  (300+ cycles)</span></div>
+					<div class="lat-bar" style="width: 100%; background: rgba(240,101,101,0.2);">
+						<span class="lat-val" style="color:var(--pos);">~100× slower than L1</span>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					These are approximate for modern desktop CPUs. Server CPUs with more cores and larger caches have even higher
+					DRAM latency (120–150 ns). The key insight: each level is roughly 3–10× slower than the previous.
+				</div>
+			</div>
+
+			<p>The CPU doesn't fetch individual bytes — it fetches in <strong>cache lines</strong>, typically 64 bytes at a
+				time. If you need 4 bytes from memory, you pay for all 64. If the other 60 bytes are data you'll never use,
+				you've wasted 93% of the memory bandwidth.</p>
+
+			<p><strong>This is the entire argument for data-oriented design:</strong> arrange your data so that when the CPU
+				fetches a cache line, every byte in it is something you actually need for the operation you're performing right
+				now.</p>
+		</div>
+
+		<div class="section">
+			<h2>Why OOP makes this worse</h2>
+
+			<p>In a classic OOP game engine, each entity is a heap-allocated object. An <code>Entity*</code> points somewhere
+				in the heap. Iterating over entities means chasing pointers — each one potentially a cache miss. Even if you
+				allocate objects sequentially, their internal layout packs <em>all</em> fields together: position next to name
+				next to texture handle next to AI state. Your physics update only needs position and velocity, but it's paying
+				to load everything else into cache.</p>
+
+			<p>DOD asks: what if we stop thinking about "objects" and start thinking about <strong>the data the CPU actually
+				needs for each operation</strong>?</p>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: CACHE MECHANICS                            -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-cache">
+
+		<div class="section">
+			<h2>How CPU caches actually work</h2>
+
+			<p>The cache sits between the CPU and main memory. When the CPU issues a load instruction, the cache controller
+				checks whether that address is already cached. If yes (<strong>hit</strong>): data arrives in 1–12 cycles. If no
+				(<strong>miss</strong>): the controller fetches the entire cache line (64 bytes) from the next level down,
+				stalling the CPU until it arrives.</p>
+
+			<p>Caches are organized as a hierarchy. Each core has its own private L1 (split into instruction and data caches,
+				typically 32–48 KB each) and L2 (256 KB–1 MB). L3 is shared across all cores (16–64 MB on modern desktop CPUs).
+				When data is evicted from L1 it may still be in L2 or L3 — misses at each level cost progressively more.</p>
+		</div>
+
+		<div class="section">
+			<h2>The cache line — the unit of transfer</h2>
+
+			<p>The CPU never fetches a single <code>float</code>. It fetches the <strong>64-byte aligned block</strong> that
+				contains it. This is the cache line — the fundamental unit of data movement between memory and cache.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">One cache line — 64 bytes</div>
+				<div class="scroll-hint">
+					<div class="mem-row">
+						<div class="mem-lbl">byte offset</div>
+						<div class="mem-cells">
+							<div class="mc w4 empty" style="font-size:9px;">0–3</div>
+							<div class="mc w4 empty" style="font-size:9px;">4–7</div>
+							<div class="mc w4 empty" style="font-size:9px;">8–11</div>
+							<div class="mc w4 empty" style="font-size:9px;">12–15</div>
+							<div class="mc w4 empty" style="font-size:9px;">16–19</div>
+							<div class="mc w4 empty" style="font-size:9px;">20–23</div>
+							<div class="mc w4 empty" style="font-size:9px;">24–27</div>
+							<div class="mc w4 empty" style="font-size:9px;">28–31</div>
+						</div>
+					</div>
+					<div class="mem-row">
+						<div class="mem-lbl"></div>
+						<div class="mem-cells">
+							<div class="mc w4 empty" style="font-size:9px;">32–35</div>
+							<div class="mc w4 empty" style="font-size:9px;">36–39</div>
+							<div class="mc w4 empty" style="font-size:9px;">40–43</div>
+							<div class="mc w4 empty" style="font-size:9px;">44–47</div>
+							<div class="mc w4 empty" style="font-size:9px;">48–51</div>
+							<div class="mc w4 empty" style="font-size:9px;">52–55</div>
+							<div class="mc w4 empty" style="font-size:9px;">56–59</div>
+							<div class="mc w4 empty" style="font-size:9px;">60–63</div>
+						</div>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					64 bytes = 16 floats, or 8 doubles, or 16 ints, or 2 typical Vec3+padding structs. Everything you store in
+					here that you <em>don't</em> need is wasted bandwidth.
+				</div>
+			</div>
+
+			<p>Two critical consequences: (1) if you access byte 0, bytes 1–63 are "free" — they're already in cache. <strong>Sequential
+				access is fast</strong> because each cache line serves multiple consecutive reads. (2) If you access byte 0,
+				then byte 4096, then byte 128, then byte 8000 — each access is a separate cache miss. <strong>Random access is
+					slow.</strong></p>
+		</div>
+
+		<div class="section">
+			<h2>The hardware prefetcher — your silent ally</h2>
+
+			<p>Modern CPUs have hardware prefetchers that detect <strong>sequential access patterns</strong> and start
+				fetching the next cache lines before you ask for them. If you iterate through an array linearly, the prefetcher
+				will be 2–4 cache lines ahead of you — effectively hiding the latency entirely.</p>
+
+			<p>But it only works for predictable patterns. Chasing pointers to random heap locations? The prefetcher can't
+				predict that. It gives up, and you pay full DRAM latency on every access. This is why a linked list of 100,000
+				nodes is dramatically slower than an array of 100,000 elements, even though the "algorithmic complexity" is the
+				same O(n).</p>
+
+			<div class="callout">
+				<strong>The prefetcher is the reason DOD works.</strong> If you lay out your data so that each operation is a
+				linear sweep through a contiguous array, the prefetcher makes cache misses almost disappear. This is the single
+				biggest performance win in DOD — not clever algorithms, just feeding the prefetcher a pattern it can predict.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Measuring it: bandwidth vs. latency</h2>
+
+			<p>DRAM on a modern system can deliver 40–60 GB/s of bandwidth. But that bandwidth is only available for <strong>sequential,
+				prefetchable access</strong>. Random pointer chasing gets you closer to 1–3 GB/s effective throughput — the
+				bandwidth is there, but you can't use it because each load depends on the result of the previous one (pointer →
+				data → next pointer → …).</p>
+
+			<div class="stat-row">
+				<div class="stat-card">
+					<div class="sv" style="color:var(--hp);">~50 GB/s</div>
+					<div class="sl">sequential throughput</div>
+				</div>
+				<div class="stat-card">
+					<div class="sv" style="color:var(--pos);">~1-3 GB/s</div>
+					<div class="sl">random-access throughput</div>
+				</div>
+				<div class="stat-card">
+					<div class="sv" style="color:var(--name);">15-30×</div>
+					<div class="sl">gap between them</div>
+				</div>
+			</div>
+
+			<p>This 15-30× gap is the concrete, measurable reason DOD matters. It's not theoretical — it's the difference
+				between your game loop taking 2ms and 30ms.</p>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: AoS LAYOUT                                 -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-aos">
+
+		<div class="section">
+			<h2>A concrete entity — the OOP way</h2>
+
+			<p>Let's use a real example. You're building a game (or a backend that manages spatial entities — think fleet
+				tracking, simulation, etc.). Each entity has:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Field</th>
+						<th>Type</th>
+						<th>Size</th>
+						<th>Used by</th>
+					</tr>
+					<tr>
+						<td><span class="cpos">pos_x</span></td>
+						<td>float</td>
+						<td>4 B</td>
+						<td>physics, rendering</td>
+					</tr>
+					<tr>
+						<td><span class="cpos">pos_y</span></td>
+						<td>float</td>
+						<td>4 B</td>
+						<td>physics, rendering</td>
+					</tr>
+					<tr>
+						<td><span class="cpos">pos_z</span></td>
+						<td>float</td>
+						<td>4 B</td>
+						<td>physics, rendering</td>
+					</tr>
+					<tr>
+						<td><span class="cvel">vel_x</span></td>
+						<td>float</td>
+						<td>4 B</td>
+						<td>physics</td>
+					</tr>
+					<tr>
+						<td><span class="cvel">vel_y</span></td>
+						<td>float</td>
+						<td>4 B</td>
+						<td>physics</td>
+					</tr>
+					<tr>
+						<td><span class="cvel">vel_z</span></td>
+						<td>float</td>
+						<td>4 B</td>
+						<td>physics</td>
+					</tr>
+					<tr>
+						<td><span class="chp">health</span></td>
+						<td>int32</td>
+						<td>4 B</td>
+						<td>gameplay</td>
+					</tr>
+					<tr>
+						<td><span class="chp">max_health</span></td>
+						<td>int32</td>
+						<td>4 B</td>
+						<td>gameplay, UI</td>
+					</tr>
+					<tr>
+						<td><span class="cname">name</span></td>
+						<td>char[32]</td>
+						<td>32 B</td>
+						<td>UI, debugging</td>
+					</tr>
+					<tr>
+						<td><span class="ctex">texture_id</span></td>
+						<td>uint32</td>
+						<td>4 B</td>
+						<td>rendering</td>
+					</tr>
+					<tr>
+						<td><span class="ctex">mesh_id</span></td>
+						<td>uint32</td>
+						<td>4 B</td>
+						<td>rendering</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Total: 72 bytes per entity. With typical struct padding/alignment, the compiler may round this up. Let's say 72
+				bytes exactly for now.</p>
+		</div>
+
+		<div class="section">
+			<h2>Array-of-Structs (AoS) memory layout</h2>
+
+			<p>The OOP approach: <code>Entity entities[N]</code>. Each entity is a contiguous block of 72 bytes, laid out one
+				after another:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">AoS — memory layout for Entity[0] and Entity[1]</div>
+				<div class="scroll-hint">
+					<div class="mem-row">
+						<div class="mem-lbl">Entity[0]</div>
+						<div class="mem-cells">
+							<div class="mc w4 pos">pos.x</div>
+							<div class="mc w4 pos">pos.y</div>
+							<div class="mc w4 pos">pos.z</div>
+							<div class="mc w4 vel">vel.x</div>
+							<div class="mc w4 vel">vel.y</div>
+							<div class="mc w4 vel">vel.z</div>
+							<div class="mc w4 hp">hp</div>
+							<div class="mc w4 hp">max</div>
+						</div>
+					</div>
+					<div class="mem-row">
+						<div class="mem-lbl" style="color:var(--text-xdim);">… continued</div>
+						<div class="mem-cells">
+							<div class="mc w8 name">name[32]</div>
+							<div class="mc w4 tex">tex</div>
+							<div class="mc w4 tex">mesh</div>
+						</div>
+					</div>
+					<div style="height: 6px;"></div>
+					<div class="mem-row">
+						<div class="mem-lbl">Entity[1]</div>
+						<div class="mem-cells">
+							<div class="mc w4 pos">pos.x</div>
+							<div class="mc w4 pos">pos.y</div>
+							<div class="mc w4 pos">pos.z</div>
+							<div class="mc w4 vel">vel.x</div>
+							<div class="mc w4 vel">vel.y</div>
+							<div class="mc w4 vel">vel.z</div>
+							<div class="mc w4 hp">hp</div>
+							<div class="mc w4 hp">max</div>
+						</div>
+					</div>
+					<div class="mem-row">
+						<div class="mem-lbl" style="color:var(--text-xdim);">… continued</div>
+						<div class="mem-cells">
+							<div class="mc w8 name">name[32]</div>
+							<div class="mc w4 tex">tex</div>
+							<div class="mc w4 tex">mesh</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">Each entity: <span class="cpos">position 12B</span> + <span class="cvel">velocity 12B</span>
+					+ <span class="chp">health 8B</span> + <span class="cname">name 32B</span> + <span
+						class="ctex">render 8B</span> = 72 bytes per entity.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The physics update — what actually gets used</h2>
+
+			<p>Your physics system runs every frame. It does: <code>pos += vel * dt</code> for all entities. It needs <span
+				class="cpos">pos</span> (12 bytes) and <span class="cvel">vel</span> (12 bytes) — 24 bytes out of 72. Let's see
+				what the CPU actually loads:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Cache line utilization during physics update (AoS)</div>
+				<div class="scroll-hint">
+					<div class="mem-row">
+						<div class="mem-lbl" style="font-size:10px;">cache line 1<br><span style="color:var(--text-xdim);">bytes 0–63</span>
+						</div>
+						<div class="mem-cells">
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">pos.x</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">pos.y</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">pos.z</div>
+							<div class="mc w4 vel" style="outline: 1px solid rgba(77,196,98,0.4);">vel.x</div>
+							<div class="mc w4 vel" style="outline: 1px solid rgba(77,196,98,0.4);">vel.y</div>
+							<div class="mc w4 vel" style="outline: 1px solid rgba(77,196,98,0.4);">vel.z</div>
+							<div class="mc w4 hp" style="opacity:0.35;">hp</div>
+							<div class="mc w4 hp" style="opacity:0.35;">max</div>
+						</div>
+					</div>
+					<div class="mem-row">
+						<div class="mem-lbl" style="font-size:10px;">cache line 2<br><span style="color:var(--text-xdim);">bytes 64–127</span>
+						</div>
+						<div class="mem-cells">
+							<div class="mc w8 name" style="opacity:0.2;">name[32]</div>
+							<div class="mc w4 tex" style="opacity:0.2;">tex</div>
+							<div class="mc w4 tex" style="opacity:0.2;">mesh</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4); font-size:9px;">[1].x</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4); font-size:9px;">[1].y</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					<span style="color:var(--hp);">Highlighted</span> = data the physics update actually reads. <span
+					style="opacity:0.35;">Dim</span> = loaded into cache but never touched.<br>
+					Entity[0] spans two cache lines. The second line is almost entirely wasted on the <span
+					class="cname">name</span> field that physics never reads.
+				</div>
+			</div>
+
+			<div class="stat-row">
+				<div class="stat-card">
+					<div class="sv" style="color:var(--pos);">24 B</div>
+					<div class="sl">needed per entity</div>
+				</div>
+				<div class="stat-card">
+					<div class="sv" style="color:var(--name);">72 B</div>
+					<div class="sl">loaded per entity</div>
+				</div>
+				<div class="stat-card">
+					<div class="sv" style="color:var(--warn);">33%</div>
+					<div class="sl">cache utilization</div>
+				</div>
+			</div>
+
+			<p>For 100,000 entities: the CPU loads 7.2 MB from memory, but only 2.4 MB of it is useful. That's 4.8 MB of
+				wasted bandwidth — and wasted cache space, which means other useful data gets evicted sooner.</p>
+		</div>
+
+		<div class="section">
+			<h2>It gets worse with heap allocation</h2>
+
+			<p>The diagram above assumes contiguous allocation (<code>Entity entities[N]</code>). If entities are
+				heap-allocated individually (<code>new Entity()</code>), they're scattered across the heap. Now each entity
+				access is potentially a full cache miss — you can't even benefit from the 33% of useful data being adjacent. The
+				prefetcher sees random addresses and gives up.</p>
+
+			<p>This is the typical OOP game engine pattern: a <code>vector&lt;Entity*&gt;</code> of pointers. Iterating means:
+				load pointer → follow pointer (miss) → load entity data (another miss) → next pointer. Two misses per entity
+				instead of ~one miss per cache line.</p>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE SoA TRANSFORM                          -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-soa">
+
+		<div class="section">
+			<h2>Struct-of-Arrays: the core transformation</h2>
+
+			<p>Instead of one array where each element contains all fields, we create <strong>one array per field</strong>.
+				Same data, different layout. The struct describes columns, not rows.</p>
+
+			<div class="compare">
+				<div>
+					<div class="compare-label" style="color:var(--pos);">Array of Structs (AoS)</div>
+					<div class="codeblock" style="margin:0; border:none; padding:12px 0; background:transparent;"><span
+						class="kw">struct</span> <span class="tp">Entity</span> {
+						<span class="tp">float</span> pos_x, pos_y, pos_z;
+						<span class="tp">float</span> vel_x, vel_y, vel_z;
+						<span class="tp">int32_t</span> health, max_health;
+						<span class="tp">char</span> name[<span class="num">32</span>];
+						<span class="tp">uint32_t</span> tex_id, mesh_id;
+						};
+						<span class="tp">Entity</span> entities[N];
+					</div>
+				</div>
+				<div>
+					<div class="compare-label" style="color:var(--hp);">Struct of Arrays (SoA)</div>
+					<div class="codeblock" style="margin:0; border:none; padding:12px 0; background:transparent;"><span
+						class="kw">struct</span> <span class="tp">Entities</span> {
+						<span class="tp">float</span> *pos_x, *pos_y, *pos_z;
+						<span class="tp">float</span> *vel_x, *vel_y, *vel_z;
+						<span class="tp">int32_t</span> *health, *max_health;
+						<span class="tp">char</span> (*name)[<span class="num">32</span>];
+						<span class="tp">uint32_t</span> *tex_id, *mesh_id;
+						};
+						<span class="cm">// each pointer → array of N</span></div>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>What changes in memory</h2>
+
+			<p>The total data is identical — same bytes, same count. But the <em>order</em> in memory is fundamentally
+				different:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">SoA — memory layout (showing pos_x and vel_x arrays)</div>
+				<div class="scroll-hint">
+					<div class="mem-row">
+						<div class="mem-lbl"><span class="cpos">pos_x[]</span></div>
+						<div class="mem-cells">
+							<div class="mc w4 pos">[0]</div>
+							<div class="mc w4 pos">[1]</div>
+							<div class="mc w4 pos">[2]</div>
+							<div class="mc w4 pos">[3]</div>
+							<div class="mc w4 pos">[4]</div>
+							<div class="mc w4 pos">[5]</div>
+							<div class="mc w4 pos">[6]</div>
+							<div class="mc w4 pos">[7]</div>
+						</div>
+					</div>
+					<div class="mem-row">
+						<div class="mem-lbl"></div>
+						<div class="mem-cells">
+							<div class="mc w4 pos">[8]</div>
+							<div class="mc w4 pos">[9]</div>
+							<div class="mc w4 pos">[10]</div>
+							<div class="mc w4 pos">[11]</div>
+							<div class="mc w4 pos">[12]</div>
+							<div class="mc w4 pos">[13]</div>
+							<div class="mc w4 pos">[14]</div>
+							<div class="mc w4 pos">[15]</div>
+						</div>
+					</div>
+					<div style="height: 6px;"></div>
+					<div class="mem-row">
+						<div class="mem-lbl"><span class="cvel">vel_x[]</span></div>
+						<div class="mem-cells">
+							<div class="mc w4 vel">[0]</div>
+							<div class="mc w4 vel">[1]</div>
+							<div class="mc w4 vel">[2]</div>
+							<div class="mc w4 vel">[3]</div>
+							<div class="mc w4 vel">[4]</div>
+							<div class="mc w4 vel">[5]</div>
+							<div class="mc w4 vel">[6]</div>
+							<div class="mc w4 vel">[7]</div>
+						</div>
+					</div>
+					<div class="mem-row">
+						<div class="mem-lbl"></div>
+						<div class="mem-cells">
+							<div class="mc w4 vel">[8]</div>
+							<div class="mc w4 vel">[9]</div>
+							<div class="mc w4 vel">[10]</div>
+							<div class="mc w4 vel">[11]</div>
+							<div class="mc w4 vel">[12]</div>
+							<div class="mc w4 vel">[13]</div>
+							<div class="mc w4 vel">[14]</div>
+							<div class="mc w4 vel">[15]</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					Each cache line (64 bytes) now holds 16 consecutive <code>float</code> values for the same field. Every byte
+					is useful. The prefetcher sees a perfectly linear access pattern.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Physics update — SoA cache utilization</h2>
+
+			<p>The physics loop now reads 6 separate arrays (pos_x, pos_y, pos_z, vel_x, vel_y, vel_z) and writes to 3 (pos_x,
+				pos_y, pos_z). Each array is a contiguous block of floats.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Cache line utilization during physics update (SoA)</div>
+				<div class="scroll-hint">
+					<div class="mem-row">
+						<div class="mem-lbl" style="font-size:10px;"><span class="cpos">pos_x</span><br>cache line 1</div>
+						<div class="mem-cells">
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[0]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[1]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[2]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[3]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[4]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[5]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[6]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[7]</div>
+						</div>
+					</div>
+					<div class="mem-row">
+						<div class="mem-lbl" style="font-size:10px;"><span class="cpos">pos_x</span><br>cache line 2</div>
+						<div class="mem-cells">
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[8]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[9]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[10]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[11]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[12]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[13]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[14]</div>
+							<div class="mc w4 pos" style="outline: 1px solid rgba(77,196,98,0.4);">[15]</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					<strong style="color:var(--hp);">100% utilization.</strong> Every byte in every cache line is a
+					<code>pos_x</code> value the physics update actually reads. 16 entities served per cache line instead of ~1.
+				</div>
+			</div>
+
+			<div class="stat-row">
+				<div class="stat-card">
+					<div class="sv" style="color:var(--hp);">100%</div>
+					<div class="sl">cache utilization</div>
+				</div>
+				<div class="stat-card">
+					<div class="sv" style="color:var(--vel);">16</div>
+					<div class="sl">entities per cache line</div>
+				</div>
+				<div class="stat-card">
+					<div class="sv" style="color:var(--accent2);">2.4 MB</div>
+					<div class="sl">total data loaded (100K)</div>
+				</div>
+			</div>
+
+			<p>Compare to AoS: 7.2 MB loaded, 33% utilized. SoA loads exactly 2.4 MB — 100% useful. That's 3× less memory
+				bandwidth, and the prefetcher handles all of it perfectly.</p>
+		</div>
+
+		<div class="section">
+			<h2>The loop itself changes shape</h2>
+
+			<div class="compare">
+				<div>
+					<div class="compare-label" style="color:var(--pos);">AoS loop</div>
+					<div class="codeblock" style="margin:0; border:none; padding:12px 0; background:transparent;"><span
+						class="kw">for</span> (<span class="tp">int</span> i = <span class="num">0</span>; i < n; i++) {
+						entities[i].pos_x += entities[i].vel_x * dt;
+						entities[i].pos_y += entities[i].vel_y * dt;
+						entities[i].pos_z += entities[i].vel_z * dt;
+						}
+					</div>
+				</div>
+				<div>
+					<div class="compare-label" style="color:var(--hp);">SoA loop</div>
+					<div class="codeblock" style="margin:0; border:none; padding:12px 0; background:transparent;"><span
+						class="kw">for</span> (<span class="tp">int</span> i = <span class="num">0</span>; i < n; i++) {
+						e->pos_x[i] += e->vel_x[i] * dt;
+						e->pos_y[i] += e->vel_y[i] * dt;
+						e->pos_z[i] += e->vel_z[i] * dt;
+						}
+					</div>
+				</div>
+			</div>
+
+			<p>The code is nearly identical. The semantic meaning is the same. But the memory access pattern is fundamentally
+				different: AoS strides by 72 bytes between each entity's <code>pos_x</code>, while SoA strides by 4 bytes. That
+				stride difference is the entire game.</p>
+		</div>
+
+		<div class="section">
+			<h2>SIMD: the bonus you get for free</h2>
+
+			<p>When data is laid out as contiguous arrays of the same type, the compiler can <strong>auto-vectorize</strong>
+				the loop. SIMD instructions (SSE, AVX, NEON) process 4–8 floats per instruction from consecutive memory. SoA
+				feeds them perfectly — the data is already packed the way SIMD wants it.</p>
+
+			<p>With AoS, auto-vectorization requires the compiler to "gather" scattered fields from different struct offsets —
+				which is either impossible or requires expensive gather instructions. Most compilers simply won't vectorize AoS
+				loops.</p>
+
+			<div class="callout good">
+				<strong>SoA gives you two wins at once:</strong> better cache utilization (less data loaded) and SIMD
+				vectorization (more work per instruction). Together, these commonly yield 5–10× speedups on tight update loops
+				over the AoS equivalent.
+			</div>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: HOT/COLD SPLITTING                         -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-hotcold">
+
+		<div class="section">
+			<h2>When full SoA is too much</h2>
+
+			<p>Pure SoA — one array per field — is maximally cache-efficient for single-field operations. But some operations
+				need multiple fields together. A rendering pass needs <code>pos</code> + <code>tex_id</code> +
+				<code>mesh_id</code> at the same time. With pure SoA, those live in 5 separate arrays, and the CPU is streaming
+				from 5 memory locations simultaneously. That's 5 separate prefetch streams — doable, but there's a limit (modern
+				CPUs track 8–16 streams).</p>
+
+			<p><strong>Hot/cold splitting</strong> is the pragmatic middle ground: group fields that are accessed together
+				into a "hot" struct, and put rarely-accessed fields in a "cold" struct. Two arrays instead of twelve.</p>
+		</div>
+
+		<div class="section">
+			<h2>Splitting by access pattern</h2>
+
+			<p>Look at which systems touch which fields:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>System</th>
+						<th>Fields accessed</th>
+						<th>Frequency</th>
+					</tr>
+					<tr>
+						<td>Physics</td>
+						<td><span class="cpos">pos</span>, <span class="cvel">vel</span></td>
+						<td>every frame</td>
+					</tr>
+					<tr>
+						<td>Rendering</td>
+						<td><span class="cpos">pos</span>, <span class="ctex">tex_id</span>, <span class="ctex">mesh_id</span></td>
+						<td>every frame</td>
+					</tr>
+					<tr>
+						<td>Gameplay</td>
+						<td><span class="chp">health</span>, <span class="chp">max_health</span>, <span class="cpos">pos</span></td>
+						<td>every frame</td>
+					</tr>
+					<tr>
+						<td>UI / Debug</td>
+						<td><span class="cname">name</span>, <span class="chp">health</span></td>
+						<td>on demand</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>The <span class="cname">name[32]</span> field is 32 bytes — nearly half the struct — and it's only used for UI
+				labels and debug logging. It's the definition of cold data. Splitting it out immediately halves the hot struct
+				size.</p>
+		</div>
+
+		<div class="section">
+			<h2>The split</h2>
+
+			<div class="compare">
+				<div>
+					<div class="compare-label" style="color:var(--hp);">Hot (every frame)</div>
+					<div class="codeblock" style="margin:0; border:none; padding:12px 0; background:transparent;"><span
+						class="kw">struct</span> <span class="tp">EntityHot</span> {
+						<span class="tp">float</span> pos_x, pos_y, pos_z;
+						<span class="tp">float</span> vel_x, vel_y, vel_z;
+						<span class="tp">int32_t</span> health, max_health;
+						<span class="tp">uint32_t</span> tex_id, mesh_id;
+						}; <span class="cm">// 40 bytes</span></div>
+				</div>
+				<div>
+					<div class="compare-label" style="color:var(--text-dim);">Cold (on demand)</div>
+					<div class="codeblock" style="margin:0; border:none; padding:12px 0; background:transparent;"><span
+						class="kw">struct</span> <span class="tp">EntityCold</span> {
+						<span class="tp">char</span> name[<span class="num">32</span>];
+						}; <span class="cm">// 32 bytes</span>
+
+
+						<span class="cm">// Same index in both arrays
+// refers to the same entity</span></div>
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Hot/cold memory layout</div>
+				<div class="scroll-hint">
+					<div class="mem-row">
+						<div class="mem-lbl" style="color:var(--hp);">hot[0]</div>
+						<div class="mem-cells">
+							<div class="mc w4 pos">p.x</div>
+							<div class="mc w4 pos">p.y</div>
+							<div class="mc w4 pos">p.z</div>
+							<div class="mc w4 vel">v.x</div>
+							<div class="mc w4 vel">v.y</div>
+							<div class="mc w4 vel">v.z</div>
+							<div class="mc w4 hp">hp</div>
+							<div class="mc w4 hp">max</div>
+						</div>
+					</div>
+					<div class="mem-row">
+						<div class="mem-lbl" style="color:var(--hp);">hot[0]+[1]</div>
+						<div class="mem-cells">
+							<div class="mc w4 tex">tex</div>
+							<div class="mc w4 tex">mesh</div>
+							<div class="msep"></div>
+							<div class="mc w4 pos" style="font-size:9px;">[1].x</div>
+							<div class="mc w4 pos" style="font-size:9px;">[1].y</div>
+							<div class="mc w4 pos" style="font-size:9px;">[1].z</div>
+							<div class="mc w4 vel" style="font-size:9px;">[1].vx</div>
+							<div class="mc w4 vel" style="font-size:9px;">[1].vy</div>
+						</div>
+					</div>
+
+					<div style="height:12px;"></div>
+
+					<div class="mem-row">
+						<div class="mem-lbl" style="color:var(--text-dim);">cold[0]</div>
+						<div class="mem-cells">
+							<div class="mc w8 name">name[32]</div>
+						</div>
+					</div>
+					<div class="mem-row">
+						<div class="mem-lbl" style="color:var(--text-dim);">cold[1]</div>
+						<div class="mem-cells">
+							<div class="mc w8 name">name[32]</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					The cold array is never touched during physics/rendering/gameplay. It only gets loaded when UI or debugging
+					actually asks for a name. The hot array is 40 bytes — one entity fits mostly in a single cache line, and the
+					physics-relevant fields (first 24 bytes) are always at the start.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Cache utilization comparison</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Layout</th>
+						<th>Bytes loaded per entity (physics)</th>
+						<th>Cache utilization</th>
+						<th>Entities per cache line</th>
+					</tr>
+					<tr>
+						<td>AoS (original)</td>
+						<td>72 B (loads everything)</td>
+						<td style="color:var(--pos);">33%</td>
+						<td>~0.9</td>
+					</tr>
+					<tr>
+						<td>Hot/cold split</td>
+						<td>40 B (hot struct)</td>
+						<td style="color:var(--name);">60%</td>
+						<td>1.6</td>
+					</tr>
+					<tr>
+						<td>Full SoA (pos+vel only)</td>
+						<td>24 B (exact fields)</td>
+						<td style="color:var(--hp);">100%</td>
+						<td>2.7</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Hot/cold splitting isn't as optimal as full SoA for a single operation, but it's often the <strong>best
+				practical tradeoff</strong>: simpler code, fewer arrays to manage, good cache behavior for all systems that
+				touch the hot data, and excellent behavior for systems that can ignore the cold data entirely.</p>
+		</div>
+
+		<div class="section">
+			<h2>Choosing the split point</h2>
+
+			<p>The split isn't about "important" vs "unimportant." It's about <strong>access frequency</strong>. Ask: for each
+				field, which systems read it and how often? Fields touched every frame go in hot. Fields touched occasionally go
+				in cold. If you have three distinct access frequency tiers, use three structs.</p>
+
+			<div class="callout">
+				<strong>Rule of thumb:</strong> if a field is accessed by fewer than half of your per-frame systems, it's a
+				candidate for cold storage. If a field is large (strings, arrays, blobs) and accessed infrequently, it should
+				almost certainly be cold.
+			</div>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: IN PRACTICE                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-practice">
+
+		<div class="section">
+			<h2>Game development patterns</h2>
+
+			<p>The Entity Component System (ECS) architecture is DOD applied to game engines. Components are stored in
+				contiguous arrays (SoA or archetype-based), and systems iterate over only the components they need. Engines like
+				Unity DOTS, Bevy (Rust), and flecs (C) all use this model. The tab on ECS architecture would cover this in depth
+				— here's the key insight:</p>
+
+			<p>An ECS world is essentially a database. Entities are row IDs. Components are columns. Systems are queries.
+				"Give me all entities with Position and Velocity" returns two arrays you can iterate in lockstep. The data
+				layout is SoA by construction — you never load Health data when running the physics query.</p>
+
+			<div class="codeblock"><span class="cm">// Bevy (Rust) — the query IS the data layout guarantee</span>
+				<span class="kw">fn</span> <span class="fn">physics_system</span>(
+				<span class="kw">mut</span> query: Query&lt;(&amp;<span class="kw">mut</span> <span class="tp">Position</span>,
+				&amp;<span class="tp">Velocity</span>)&gt;,
+				time: Res&lt;<span class="tp">Time</span>&gt;,
+				) {
+				<span class="kw">for</span> (<span class="kw">mut</span> pos, vel) <span class="kw">in</span> &amp;<span
+					class="kw">mut</span> query {
+				pos.<span class="num">0</span> += vel.<span class="num">0</span> * time.delta_secs();
+				}
+				}
+				<span class="cm">// Under the hood: iterates contiguous Position[] and Velocity[]
+// arrays in lockstep. No Name, no TextureId — just what was queried.</span></div>
+		</div>
+
+		<div class="section">
+			<h2>Backend / server patterns</h2>
+
+			<p>DOD isn't just for games. Any system that batch-processes large collections benefits from the same
+				principles:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Domain</th>
+						<th>AoS pattern</th>
+						<th>DOD equivalent</th>
+					</tr>
+					<tr>
+						<td>Database</td>
+						<td>Row store (PostgreSQL, MySQL)</td>
+						<td>Column store (ClickHouse, DuckDB, Parquet)</td>
+					</tr>
+					<tr>
+						<td>API server</td>
+						<td>ORM objects with all fields hydrated</td>
+						<td>Select only needed columns; process in batches</td>
+					</tr>
+					<tr>
+						<td>Analytics</td>
+						<td>Array of JSON objects</td>
+						<td>Apache Arrow columnar format</td>
+					</tr>
+					<tr>
+						<td>Network</td>
+						<td>Per-connection object with all state</td>
+						<td>Hot/cold split: connection state vs. config/metadata</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Column stores are SoA for databases. When you run <code>SELECT avg(price) FROM orders</code>, a column store
+				reads only the <code>price</code> column — a contiguous array of numbers. A row store must scan every row,
+				loading all columns (customer_id, date, status, address…) to extract one field. This is literally the AoS vs SoA
+				cache utilization problem at the storage layer, and it's why analytical databases are 10–100× faster than row
+				stores for aggregation queries.</p>
+		</div>
+
+		<div class="section">
+			<h2>When DOD doesn't help</h2>
+
+			<p>DOD is about <strong>batch operations on homogeneous data</strong>. It's not universally better:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Scenario</th>
+						<th>DOD helps?</th>
+						<th>Why</th>
+					</tr>
+					<tr>
+						<td>Update all 100K entities per frame</td>
+						<td style="color:var(--hp);">yes</td>
+						<td>Classic batch iteration — cache + prefetch + SIMD</td>
+					</tr>
+					<tr>
+						<td>Access a single entity by ID</td>
+						<td style="color:var(--text-dim);">no difference</td>
+						<td>One lookup is one lookup regardless of layout</td>
+					</tr>
+					<tr>
+						<td>Small collections (&lt;100 elements)</td>
+						<td style="color:var(--text-dim);">no difference</td>
+						<td>Everything fits in L1 either way</td>
+					</tr>
+					<tr>
+						<td>Graph traversal (sparse, pointer-heavy)</td>
+						<td style="color:var(--pos);">limited</td>
+						<td>Random access pattern defeats prefetcher; reordering nodes by traversal order helps somewhat</td>
+					</tr>
+					<tr>
+						<td>All fields needed for every operation</td>
+						<td style="color:var(--pos);">no benefit</td>
+						<td>If every byte is useful, AoS and SoA load the same amount</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Migration: you don't have to go all-in</h2>
+
+			<p>DOD is a spectrum, not a binary choice. Practical steps, roughly ordered by effort/impact:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Step</th>
+						<th>Change</th>
+						<th>Effort</th>
+						<th>Impact</th>
+					</tr>
+					<tr>
+						<td>1</td>
+						<td>Replace <code>vector&lt;T*&gt;</code> with <code>vector&lt;T&gt;</code></td>
+						<td>trivial</td>
+						<td>eliminates pointer-chasing; contiguous allocation</td>
+					</tr>
+					<tr>
+						<td>2</td>
+						<td>Move large/cold fields to a separate struct</td>
+						<td>low</td>
+						<td>hot struct fits in cache; cold data untouched in hot paths</td>
+					</tr>
+					<tr>
+						<td>3</td>
+						<td>Split hot struct into per-field arrays (SoA) for the hottest loop</td>
+						<td>medium</td>
+						<td>100% utilization for that loop; enables SIMD</td>
+					</tr>
+					<tr>
+						<td>4</td>
+						<td>Adopt an ECS framework / columnar data model</td>
+						<td>high</td>
+						<td>systematic SoA for the entire codebase</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>Start with step 1.</strong> It's free, it's always correct, and it's often the single biggest win. A
+				<code>vector&lt;Entity&gt;</code> with 33% cache utilization is still dramatically faster than a <code>vector&lt;Entity*&gt;</code>
+				with 33% utilization + a pointer chase per element. Contiguous allocation is the prerequisite for everything
+				else.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Measurement cheat sheet</h2>
+
+			<p>You can verify all of this on your actual hardware with performance counters:</p>
+
+			<div class="codeblock"><span class="cm"># Linux — count L1 data cache misses for your program</span>
+				<span class="fn">perf stat</span> -e L1-dcache-load-misses,L1-dcache-loads ./my_program
+
+				<span class="cm"># macOS — Instruments → Counters (or dtrace)</span>
+
+				<span class="cm"># Quick sanity check: time your hot loop with both layouts</span>
+				<span class="cm"># and compare. If AoS→SoA doesn't speed it up by at least 2×,</span>
+				<span class="cm"># your bottleneck is elsewhere (ALU, branch misprediction, I/O).</span></div>
+
+			<p>Key metrics: <strong>L1-dcache-load-misses</strong> (how often you miss L1), <strong>LLC-load-misses</strong>
+				(how often you miss the last-level cache and hit DRAM), and <strong>instructions per cycle</strong> (IPC — if
+				it's below 1.0, you're memory-bound; if above 2.0, the CPU is well-fed).</p>
+		</div>
+	</div>
+
+</div>
+
+<script>
+	// Tab switching
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
