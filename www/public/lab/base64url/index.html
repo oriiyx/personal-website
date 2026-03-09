@@ -1,1866 +1,1873 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Base64url — From First Principles</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
-          rel="stylesheet">
-    <style>
-        :root {
-            --bg: #0b0d11;
-            --surface: #11141b;
-            --surface2: #171b25;
-            --surface3: #1d2230;
-            --border: #232838;
-            --border-hi: #2f3650;
-            --text: #c8cee0;
-            --text-b: #e2e6f0;
-            --text-dim: #5c6380;
-            --text-xdim: #3b4058;
-            --mono: 'JetBrains Mono', monospace;
-            --serif: 'Source Serif 4', Georgia, serif;
-            --byte0: #f06565;
-            --byte1: #4dc462;
-            --byte2: #3d9be8;
-            --c0: #f06565;
-            --c1: #e8b834;
-            --c2: #4dc462;
-            --c3: #3d9be8;
-            --accent: #7c5ce0;
-            --accent2: #c084fc;
-            --warn: #e8883a;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: var(--serif);
-            font-size: 16px;
-            line-height: 1.72;
-            min-height: 100vh;
-        }
-
-        /* ── Layout ── */
-        .page {
-            max-width: 820px;
-            margin: 0 auto;
-            padding: 48px 24px 100px;
-        }
-
-        .page-header {
-            margin-bottom: 40px;
-            padding-bottom: 28px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .page-header h1 {
-            font-family: var(--mono);
-            font-size: 26px;
-            font-weight: 700;
-            color: var(--text-b);
-            letter-spacing: -1px;
-            margin-bottom: 6px;
-        }
-
-        .page-header .sub {
-            font-family: var(--mono);
-            font-size: 12px;
-            color: var(--text-dim);
-            letter-spacing: 0.5px;
-        }
-
-        /* ── Tabs ── */
-        .tab-bar {
-            display: flex;
-            gap: 2px;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 4px;
-            margin-bottom: 36px;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .tab-btn {
-            font-family: var(--mono);
-            font-size: 11px;
-            font-weight: 500;
-            letter-spacing: 0.3px;
-            padding: 8px 16px;
-            border: none;
-            border-radius: 7px;
-            cursor: pointer;
-            background: transparent;
-            color: var(--text-dim);
-            transition: all 0.15s;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-
-        .tab-btn:hover {
-            color: var(--text);
-            background: var(--surface2);
-        }
-
-        .tab-btn.active {
-            color: #fff;
-            background: var(--accent);
-        }
-
-        .tab-panel {
-            display: none;
-        }
-
-        .tab-panel.active {
-            display: block;
-            animation: fadeIn 0.2s ease;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(6px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* ── Prose ── */
-        .section {
-            margin-bottom: 40px;
-        }
-
-        .section h2 {
-            font-family: var(--mono);
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--text-b);
-            letter-spacing: -0.3px;
-            margin-bottom: 16px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .section p {
-            margin-bottom: 14px;
-        }
-
-        .section p:last-child {
-            margin-bottom: 0;
-        }
-
-        strong {
-            color: var(--text-b);
-            font-weight: 600;
-        }
-
-        code {
-            font-family: var(--mono);
-            font-size: 0.88em;
-            background: var(--surface2);
-            padding: 2px 7px;
-            border-radius: 4px;
-            color: var(--accent2);
-        }
-
-        /* ── Diagrams ── */
-        .diagram {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 24px;
-            margin: 20px 0;
-            overflow-x: auto;
-        }
-
-        .diagram-title {
-            font-family: var(--mono);
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: var(--text-dim);
-            margin-bottom: 16px;
-        }
-
-        .diagram-caption {
-            font-family: var(--mono);
-            font-size: 11px;
-            color: var(--text-dim);
-            margin-top: 14px;
-            line-height: 1.6;
-        }
-
-        /* Bit grid components */
-        .bit-row {
-            display: flex;
-            align-items: center;
-            margin-bottom: 3px;
-        }
-
-        .bit-lbl {
-            width: 140px;
-            flex-shrink: 0;
-            font-family: var(--mono);
-            font-size: 11px;
-            color: var(--text-dim);
-            text-align: right;
-            padding-right: 14px;
-        }
-
-        .bits {
-            display: flex;
-            gap: 1px;
-        }
-
-        .b {
-            width: 26px;
-            height: 28px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: var(--mono);
-            font-size: 12px;
-            font-weight: 600;
-            border-radius: 2px;
-        }
-
-        .b.r {
-            background: rgba(240, 101, 101, 0.09);
-            color: var(--byte0);
-        }
-
-        .b.g {
-            background: rgba(77, 196, 98, 0.09);
-            color: var(--byte1);
-        }
-
-        .b.u {
-            background: rgba(61, 155, 232, 0.09);
-            color: var(--byte2);
-        }
-
-        .b.z {
-            background: rgba(80, 80, 100, 0.05);
-            color: #333850;
-        }
-
-        .b.c0 {
-            background: rgba(240, 101, 101, 0.09);
-            color: var(--c0);
-        }
-
-        .b.c1 {
-            background: rgba(232, 184, 52, 0.09);
-            color: var(--c1);
-        }
-
-        .b.c2 {
-            background: rgba(77, 196, 98, 0.09);
-            color: var(--c2);
-        }
-
-        .b.c3 {
-            background: rgba(61, 155, 232, 0.09);
-            color: var(--c3);
-        }
-
-        .bsep {
-            width: 6px;
-            flex-shrink: 0;
-        }
-
-        .divider-row {
-            display: flex;
-            align-items: center;
-            margin: 6px 0;
-        }
-
-        .div-lbl {
-            width: 140px;
-            flex-shrink: 0;
-            font-family: var(--mono);
-            font-size: 10px;
-            font-weight: 600;
-            color: var(--accent);
-            text-align: right;
-            padding-right: 14px;
-        }
-
-        .div-line {
-            flex: 1;
-            height: 1px;
-            background: var(--border);
-        }
-
-        /* Bracket labels */
-        .bracket-row {
-            display: flex;
-            margin-top: 4px;
-        }
-
-        .bracket-spacer {
-            width: 140px;
-            flex-shrink: 0;
-        }
-
-        .bracket-group {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            flex-shrink: 0;
-        }
-
-        .bracket-bar {
-            border-left: 1px solid;
-            border-right: 1px solid;
-            border-bottom: 1px solid;
-            border-radius: 0 0 3px 3px;
-            height: 7px;
-            opacity: 0.35;
-        }
-
-        .bracket-text {
-            font-family: var(--mono);
-            font-size: 9px;
-            margin-top: 2px;
-            opacity: 0.6;
-        }
-
-        /* Output char cards */
-        .out-row {
-            display: flex;
-            gap: 8px;
-            margin-top: 14px;
-            padding-left: 140px;
-        }
-
-        .ocard {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 10px 16px;
-            text-align: center;
-        }
-
-        .ocard .oc-ch {
-            font-family: var(--mono);
-            font-size: 24px;
-            font-weight: 700;
-        }
-
-        .ocard .oc-sub {
-            font-family: var(--mono);
-            font-size: 9px;
-            color: var(--text-dim);
-            margin-top: 2px;
-        }
-
-        .ocard:nth-child(1) .oc-ch {
-            color: var(--c0);
-        }
-
-        .ocard:nth-child(2) .oc-ch {
-            color: var(--c1);
-        }
-
-        .ocard:nth-child(3) .oc-ch {
-            color: var(--c2);
-        }
-
-        .ocard:nth-child(4) .oc-ch {
-            color: var(--c3);
-        }
-
-        /* Code block */
-        .codeblock {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 18px 20px;
-            margin: 16px 0;
-            font-family: var(--mono);
-            font-size: 12px;
-            line-height: 1.7;
-            overflow-x: auto;
-            color: var(--text);
-        }
-
-        .codeblock .kw {
-            color: var(--accent2);
-        }
-
-        .codeblock .cm {
-            color: var(--text-dim);
-            font-style: italic;
-        }
-
-        .codeblock .op {
-            color: #e599f7;
-        }
-
-        .codeblock .num {
-            color: var(--c1);
-        }
-
-        .codeblock .str {
-            color: var(--byte1);
-        }
-
-        /* Callout */
-        .callout {
-            background: rgba(124, 92, 224, 0.06);
-            border: 1px solid rgba(124, 92, 224, 0.14);
-            border-radius: 8px;
-            padding: 14px 18px;
-            margin: 16px 0;
-            font-size: 14px;
-            line-height: 1.65;
-        }
-
-        .callout.warn {
-            background: rgba(232, 136, 58, 0.06);
-            border-color: rgba(232, 136, 58, 0.14);
-        }
-
-        /* Table */
-        .tbl-wrap {
-            overflow-x: auto;
-            margin: 16px 0;
-        }
-
-        table {
-            border-collapse: collapse;
-            font-family: var(--mono);
-            font-size: 12px;
-            width: 100%;
-        }
-
-        th {
-            text-align: left;
-            padding: 8px 14px;
-            background: var(--surface2);
-            color: var(--text-dim);
-            font-weight: 600;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        td {
-            padding: 8px 14px;
-            border-bottom: 1px solid var(--border);
-            color: var(--text);
-        }
-
-        tr:last-child td {
-            border-bottom: none;
-        }
-
-        /* Alphabet grid */
-        .alpha-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
-            gap: 3px;
-            margin: 16px 0;
-        }
-
-        .alpha-cell {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 6px 2px;
-            text-align: center;
-            font-family: var(--mono);
-            transition: border-color 0.15s;
-        }
-
-        .alpha-cell:hover {
-            border-color: var(--accent);
-        }
-
-        .alpha-cell .ac-char {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--text-b);
-        }
-
-        .alpha-cell .ac-idx {
-            font-size: 9px;
-            color: var(--text-dim);
-        }
-
-        /* Flow arrow */
-        .flow-arrow {
-            text-align: center;
-            color: var(--text-xdim);
-            font-size: 18px;
-            padding: 6px 0;
-            font-family: var(--mono);
-        }
-
-        .flow-label {
-            font-family: var(--mono);
-            font-size: 10px;
-            color: var(--text-dim);
-            display: block;
-        }
-
-        /* Inline colored labels */
-        .cr {
-            color: var(--byte0);
-        }
-
-        .cg {
-            color: var(--byte1);
-        }
-
-        .cb {
-            color: var(--byte2);
-        }
-
-        .cy {
-            color: var(--c1);
-        }
-
-        .cp {
-            color: var(--accent2);
-        }
-
-        /* Scroll hint */
-        .scroll-hint {
-            min-width: 580px;
-        }
-
-        @media (max-width: 640px) {
-            .tab-btn {
-                font-size: 10px;
-                padding: 7px 10px;
-            }
-
-            .bit-lbl, .div-lbl, .bracket-spacer {
-                width: 90px;
-                font-size: 9px;
-            }
-
-            .b {
-                width: 20px;
-                height: 22px;
-                font-size: 10px;
-            }
-
-            .out-row {
-                padding-left: 90px;
-            }
-        }
-    </style>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Base64url — From First Principles</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+          --byte0: #f06565;
+          --byte1: #4dc462;
+          --byte2: #3d9be8;
+          --c0: #f06565;
+          --c1: #e8b834;
+          --c2: #4dc462;
+          --c3: #3d9be8;
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+      }
+
+      * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+      }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      /* ── Layout ── */
+      .page {
+          max-width: 820px;
+          margin: 0 auto;
+          padding: 48px 24px 100px;
+      }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      /* ── Tabs ── */
+      .tab-bar {
+          display: flex;
+          gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+      }
+
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+
+      .tab-btn:hover {
+          color: var(--text);
+          background: var(--surface2);
+      }
+
+      .tab-btn.active {
+          color: #fff;
+          background: var(--accent);
+      }
+
+      .tab-panel {
+          display: none;
+      }
+
+      .tab-panel.active {
+          display: block;
+          animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn {
+          from {
+              opacity: 0;
+              transform: translateY(6px);
+          }
+          to {
+              opacity: 1;
+              transform: translateY(0);
+          }
+      }
+
+      /* ── Prose ── */
+      .section {
+          margin-bottom: 40px;
+      }
+
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .section p {
+          margin-bottom: 14px;
+      }
+
+      .section p:last-child {
+          margin-bottom: 0;
+      }
+
+      strong {
+          color: var(--text-b);
+          font-weight: 600;
+      }
+
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      /* ── Diagrams ── */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* Bit grid components */
+      .bit-row {
+          display: flex;
+          align-items: center;
+          margin-bottom: 3px;
+      }
+
+      .bit-lbl {
+          width: 140px;
+          flex-shrink: 0;
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          text-align: right;
+          padding-right: 14px;
+      }
+
+      .bits {
+          display: flex;
+          gap: 1px;
+      }
+
+      .b {
+          width: 26px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: var(--mono);
+          font-size: 12px;
+          font-weight: 600;
+          border-radius: 2px;
+      }
+
+      .b.r {
+          background: rgba(240, 101, 101, 0.09);
+          color: var(--byte0);
+      }
+
+      .b.g {
+          background: rgba(77, 196, 98, 0.09);
+          color: var(--byte1);
+      }
+
+      .b.u {
+          background: rgba(61, 155, 232, 0.09);
+          color: var(--byte2);
+      }
+
+      .b.z {
+          background: rgba(80, 80, 100, 0.05);
+          color: #333850;
+      }
+
+      .b.c0 {
+          background: rgba(240, 101, 101, 0.09);
+          color: var(--c0);
+      }
+
+      .b.c1 {
+          background: rgba(232, 184, 52, 0.09);
+          color: var(--c1);
+      }
+
+      .b.c2 {
+          background: rgba(77, 196, 98, 0.09);
+          color: var(--c2);
+      }
+
+      .b.c3 {
+          background: rgba(61, 155, 232, 0.09);
+          color: var(--c3);
+      }
+
+      .bsep {
+          width: 6px;
+          flex-shrink: 0;
+      }
+
+      .divider-row {
+          display: flex;
+          align-items: center;
+          margin: 6px 0;
+      }
+
+      .div-lbl {
+          width: 140px;
+          flex-shrink: 0;
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          color: var(--accent);
+          text-align: right;
+          padding-right: 14px;
+      }
+
+      .div-line {
+          flex: 1;
+          height: 1px;
+          background: var(--border);
+      }
+
+      /* Bracket labels */
+      .bracket-row {
+          display: flex;
+          margin-top: 4px;
+      }
+
+      .bracket-spacer {
+          width: 140px;
+          flex-shrink: 0;
+      }
+
+      .bracket-group {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          flex-shrink: 0;
+      }
+
+      .bracket-bar {
+          border-left: 1px solid;
+          border-right: 1px solid;
+          border-bottom: 1px solid;
+          border-radius: 0 0 3px 3px;
+          height: 7px;
+          opacity: 0.35;
+      }
+
+      .bracket-text {
+          font-family: var(--mono);
+          font-size: 9px;
+          margin-top: 2px;
+          opacity: 0.6;
+      }
+
+      /* Output char cards */
+      .out-row {
+          display: flex;
+          gap: 8px;
+          margin-top: 14px;
+          padding-left: 140px;
+      }
+
+      .ocard {
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 10px 16px;
+          text-align: center;
+      }
+
+      .ocard .oc-ch {
+          font-family: var(--mono);
+          font-size: 24px;
+          font-weight: 700;
+      }
+
+      .ocard .oc-sub {
+          font-family: var(--mono);
+          font-size: 9px;
+          color: var(--text-dim);
+          margin-top: 2px;
+      }
+
+      .ocard:nth-child(1) .oc-ch {
+          color: var(--c0);
+      }
+
+      .ocard:nth-child(2) .oc-ch {
+          color: var(--c1);
+      }
+
+      .ocard:nth-child(3) .oc-ch {
+          color: var(--c2);
+      }
+
+      .ocard:nth-child(4) .oc-ch {
+          color: var(--c3);
+      }
+
+      /* Code block */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+      }
+
+      .codeblock .kw {
+          color: var(--accent2);
+      }
+
+      .codeblock .cm {
+          color: var(--text-dim);
+          font-style: italic;
+      }
+
+      .codeblock .op {
+          color: #e599f7;
+      }
+
+      .codeblock .num {
+          color: var(--c1);
+      }
+
+      .codeblock .str {
+          color: var(--byte1);
+      }
+
+      /* Callout */
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+
+      /* Table */
+      .tbl-wrap {
+          overflow-x: auto;
+          margin: 16px 0;
+      }
+
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+      }
+
+      tr:last-child td {
+          border-bottom: none;
+      }
+
+      /* Alphabet grid */
+      .alpha-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+          gap: 3px;
+          margin: 16px 0;
+      }
+
+      .alpha-cell {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          padding: 6px 2px;
+          text-align: center;
+          font-family: var(--mono);
+          transition: border-color 0.15s;
+      }
+
+      .alpha-cell:hover {
+          border-color: var(--accent);
+      }
+
+      .alpha-cell .ac-char {
+          font-size: 16px;
+          font-weight: 600;
+          color: var(--text-b);
+      }
+
+      .alpha-cell .ac-idx {
+          font-size: 9px;
+          color: var(--text-dim);
+      }
+
+      /* Flow arrow */
+      .flow-arrow {
+          text-align: center;
+          color: var(--text-xdim);
+          font-size: 18px;
+          padding: 6px 0;
+          font-family: var(--mono);
+      }
+
+      .flow-label {
+          font-family: var(--mono);
+          font-size: 10px;
+          color: var(--text-dim);
+          display: block;
+      }
+
+      /* Inline colored labels */
+      .cr {
+          color: var(--byte0);
+      }
+
+      .cg {
+          color: var(--byte1);
+      }
+
+      .cb {
+          color: var(--byte2);
+      }
+
+      .cy {
+          color: var(--c1);
+      }
+
+      .cp {
+          color: var(--accent2);
+      }
+
+      /* Scroll hint */
+      .scroll-hint {
+          min-width: 580px;
+      }
+
+      @media (max-width: 640px) {
+          .tab-btn {
+              font-size: 10px;
+              padding: 7px 10px;
+          }
+
+          .bit-lbl, .div-lbl, .bracket-spacer {
+              width: 90px;
+              font-size: 9px;
+          }
+
+          .b {
+              width: 20px;
+              height: 22px;
+              font-size: 10px;
+          }
+
+          .out-row {
+              padding-left: 90px;
+          }
+      }
+	</style>
 </head>
 <body>
 <div class="page">
 
-    <div class="page-header">
-        <h1>base64url from first principles</h1>
-        <div class="sub">RFC 4648 §5 · url-safe alphabet · no padding · for developers who want the full picture</div>
-    </div>
-
-    <div class="tab-bar" id="tab-bar">
-        <button class="tab-btn active" data-tab="problem">The Problem</button>
-        <button class="tab-btn" data-tab="alphabet">The Alphabet</button>
-        <button class="tab-btn" data-tab="encoding">Encoding</button>
-        <button class="tab-btn" data-tab="remainder">Remainders</button>
-        <button class="tab-btn" data-tab="decoding">Decoding</button>
-        <button class="tab-btn" data-tab="impl">Implementation</button>
-    </div>
-
-    <!-- ════════════════════════════════════════════════ -->
-    <!-- TAB: THE PROBLEM                                -->
-    <!-- ════════════════════════════════════════════════ -->
-    <div class="tab-panel active" id="tab-problem">
-
-        <div class="section">
-            <h2>Why does base64 exist?</h2>
-
-            <p>Many transport protocols — email (SMTP), HTTP headers, URLs, JSON — were designed for
-                <strong>text</strong>. They use certain bytes as control characters: newlines terminate headers, <code>NUL</code>
-                terminates C strings, <code>+</code> means "space" in a URL query, <code>/</code> separates path
-                segments, <code>"</code> delimits JSON strings.</p>
-
-            <p>Now imagine you need to send a cryptographic signature, a compressed blob, or a JPEG through one of these
-                channels. Raw binary will inevitably contain bytes that collide with the protocol's special characters.
-                You'd get truncated data, misparses, or silent corruption.</p>
-
-            <p><strong>Base64 solves this by encoding arbitrary binary data using only 64 characters that are safe in
-                virtually all text contexts.</strong> The tradeoff is size: 3 input bytes become 4 output characters — a
-                ~33% expansion. That's the cost of universality.</p>
-        </div>
-
-        <div class="section">
-            <h2>Why "url-safe"?</h2>
-
-            <p>Standard base64 (RFC 4648 §4) uses <code>+</code> and <code>/</code> as its 62nd and 63rd characters.
-                Both are problematic in URLs: <code>+</code> is interpreted as a space in query strings, and
-                <code>/</code> is a path separator. So you'd have to percent-encode them (<code>%2B</code>,
-                <code>%2F</code>), which defeats the purpose of a compact encoding.</p>
-
-            <p>Base64url (RFC 4648 §5) replaces them with <code>-</code> and <code>_</code>, which are unreserved in
-                URLs. It also typically omits the <code>=</code> padding characters, since the decoder can infer the
-                original length from the encoded string's length.</p>
-
-            <p>This makes base64url the standard encoding for JWTs, JWKs, and most modern web token formats — which is
-                exactly the context in our credential issuance system.</p>
-        </div>
-
-        <div class="section">
-            <h2>The core contract</h2>
-
-            <div class="diagram">
-                <div class="diagram-title">Encoding ratio</div>
-                <div style="font-family:var(--mono); font-size: 14px; text-align:center; padding: 10px 0;">
-                    <span class="cr">3 bytes</span>
-                    <span style="color:var(--text-dim); margin: 0 12px;">→</span>
-                    <span style="color:var(--text-dim);">24 bits</span>
-                    <span style="color:var(--text-dim); margin: 0 12px;">→</span>
-                    <span class="cp">4 × 6-bit values</span>
-                    <span style="color:var(--text-dim); margin: 0 12px;">→</span>
-                    <span class="cy">4 ASCII characters</span>
-                </div>
-                <div class="diagram-caption">
-                    Every group of 3 input bytes (24 bits) maps to exactly 4 output characters.<br>
-                    The key insight: <strong>24 is the least common multiple of 8 and 6</strong>, so 24 bits is where
-                    the byte boundary and the base64-character boundary align cleanly.
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- ════════════════════════════════════════════════ -->
-    <!-- TAB: THE ALPHABET                               -->
-    <!-- ════════════════════════════════════════════════ -->
-    <div class="tab-panel" id="tab-alphabet">
-
-        <div class="section">
-            <h2>Why 6 bits = 64 characters</h2>
-
-            <p>A single bit gives you 2 values (0 or 1). Each additional bit doubles the range. With 6 bits you get
-                2<sup>6</sup> = <strong>64</strong> possible values (0–63). That's enough to index into an alphabet of
-                64 printable ASCII characters, and it divides evenly into 24 — which is the key property that makes the
-                3-byte → 4-character mapping work.</p>
-
-            <p>Why not 7 bits (128 chars)? You'd need 128 printable characters that are safe everywhere — there aren't
-                enough. Why not 5 bits (32 chars)? That works (it's base32), but the expansion ratio is worse: 5 bytes →
-                8 characters (60% overhead vs. 33%).</p>
-
-            <p>6 bits is the sweet spot: large enough alphabet to keep expansion low, small enough to stay within safe
-                printable ASCII.</p>
-        </div>
-
-        <div class="section">
-            <h2>The 64-character table</h2>
-
-            <p>The position in this table <strong>is</strong> the 6-bit value. Character at index 0 is <code>A</code>,
-                at index 25 is <code>Z</code>, at index 62 is <code>-</code>, at index 63 is <code>_</code>.</p>
-
-            <div class="alpha-grid" id="alpha-grid"></div>
-
-            <p>In code, this is just a string literal — the index operator gives you the character:</p>
-
-            <div class="codeblock"><span class="kw">static const char</span> ENC_TABLE[] = <span class="str">"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"</span>;
-
-                <span class="cm">// ENC_TABLE[0]  → 'A'</span>
-                <span class="cm">// ENC_TABLE[25] → 'Z'</span>
-                <span class="cm">// ENC_TABLE[52] → '0'</span>
-                <span class="cm">// ENC_TABLE[63] → '_'</span></div>
-        </div>
-
-        <div class="section">
-            <h2>Standard vs. url-safe</h2>
-
-            <div class="tbl-wrap">
-                <table>
-                    <tr>
-                        <th>Index</th>
-                        <th>Standard (RFC 4648 §4)</th>
-                        <th>URL-safe (RFC 4648 §5)</th>
-                        <th>Why the change</th>
-                    </tr>
-                    <tr>
-                        <td>62</td>
-                        <td><code>+</code></td>
-                        <td><code>-</code></td>
-                        <td><code>+</code> means space in URL query strings</td>
-                    </tr>
-                    <tr>
-                        <td>63</td>
-                        <td><code>/</code></td>
-                        <td><code>_</code></td>
-                        <td><code>/</code> is a URL path separator</td>
-                    </tr>
-                    <tr>
-                        <td>padding</td>
-                        <td><code>=</code></td>
-                        <td>omitted</td>
-                        <td><code>=</code> is the assignment operator in query params</td>
-                    </tr>
-                </table>
-            </div>
-
-            <p>Characters 0–61 are identical in both variants.</p>
-        </div>
-
-    </div>
-
-    <!-- ════════════════════════════════════════════════ -->
-    <!-- TAB: ENCODING                                   -->
-    <!-- ════════════════════════════════════════════════ -->
-    <div class="tab-panel" id="tab-encoding">
-
-        <div class="section">
-            <h2>Worked example: encoding "Man"</h2>
-
-            <p><code>"Man"</code> is the classic RFC example. Three ASCII characters, three bytes, one complete group
-                with no remainder — the simplest case.</p>
-
-            <div class="diagram">
-                <div class="diagram-title">Step 1 — Text to bytes</div>
-                <div style="display:flex; gap:14px; justify-content:center; padding: 8px 0;">
-                    <div style="text-align:center;">
-                        <div style="font-family:var(--mono); font-size:28px; font-weight:700; color:var(--byte0);">M
-                        </div>
-                        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">77 · 0x4D</div>
-                    </div>
-                    <div style="text-align:center;">
-                        <div style="font-family:var(--mono); font-size:28px; font-weight:700; color:var(--byte1);">a
-                        </div>
-                        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">97 · 0x61</div>
-                    </div>
-                    <div style="text-align:center;">
-                        <div style="font-family:var(--mono); font-size:28px; font-weight:700; color:var(--byte2);">n
-                        </div>
-                        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">110 · 0x6E</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="diagram">
-                <div class="diagram-title">Step 2 — Pack 3 bytes into a 24-bit integer</div>
-
-                <p style="font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:16px;">
-                    We need one contiguous 24-bit value so we can slice it differently (into 6-bit groups instead of
-                    8-bit bytes). The way we combine them: shift each byte to its lane, then OR them together.
-                </p>
-
-                <div class="scroll-hint">
-                    <!-- byte0 << 16 -->
-                    <div class="bit-row">
-                        <div class="bit-lbl"><span class="cr">77</span> &lt;&lt; 16</div>
-                        <div class="bits">
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                        </div>
-                    </div>
-                    <!-- byte1 << 8 -->
-                    <div class="bit-row">
-                        <div class="bit-lbl"><span class="cg">97</span> &lt;&lt; 8</div>
-                        <div class="bits">
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b g">0</div>
-                            <div class="b g">1</div>
-                            <div class="b g">1</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">1</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                        </div>
-                    </div>
-                    <!-- byte2 -->
-                    <div class="bit-row">
-                        <div class="bit-lbl"><span class="cb">110</span></div>
-                        <div class="bits">
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b u">0</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">0</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">0</div>
-                        </div>
-                    </div>
-
-                    <!-- OR divider -->
-                    <div class="divider-row">
-                        <div class="div-lbl">OR (|) =</div>
-                        <div class="div-line"></div>
-                    </div>
-
-                    <!-- Combined -->
-                    <div class="bit-row">
-                        <div class="bit-lbl" style="color:var(--text-b); font-weight:600;">n = 5,071,214</div>
-                        <div class="bits">
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="bsep"></div>
-                            <div class="b g">0</div>
-                            <div class="b g">1</div>
-                            <div class="b g">1</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">1</div>
-                            <div class="bsep"></div>
-                            <div class="b u">0</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">0</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">0</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="diagram-caption">
-                    <code>&lt;&lt; 16</code> moves byte 0 to bits 23–16. <code>&lt;&lt; 8</code> moves byte 1 to bits
-                    15–8. Byte 2 stays at bits 7–0.
-                    Since they occupy different bit lanes, <code>|</code> (OR) merges them with no interference — it's
-                    just "place this value here."
-                </div>
-            </div>
-
-            <div class="diagram">
-                <div class="diagram-title">Step 3 — Slice into four 6-bit groups</div>
-
-                <p style="font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:16px;">
-                    Same 24 bits, different grouping. Instead of 8-8-8, we read 6-6-6-6.
-                </p>
-
-                <div class="scroll-hint">
-                    <!-- Colored as 4x6 -->
-                    <div class="bit-row">
-                        <div class="bit-lbl" style="color:var(--text-b); font-weight:600;">n as 4×6</div>
-                        <div class="bits">
-                            <div class="b c0">0</div>
-                            <div class="b c0">1</div>
-                            <div class="b c0">0</div>
-                            <div class="b c0">0</div>
-                            <div class="b c0">1</div>
-                            <div class="b c0">1</div>
-                            <div class="bsep"></div>
-                            <div class="b c1">0</div>
-                            <div class="b c1">1</div>
-                            <div class="b c1">0</div>
-                            <div class="b c1">1</div>
-                            <div class="b c1">1</div>
-                            <div class="b c1">0</div>
-                            <div class="bsep"></div>
-                            <div class="b c2">0</div>
-                            <div class="b c2">0</div>
-                            <div class="b c2">0</div>
-                            <div class="b c2">1</div>
-                            <div class="b c2">0</div>
-                            <div class="b c2">1</div>
-                            <div class="bsep"></div>
-                            <div class="b c3">1</div>
-                            <div class="b c3">0</div>
-                            <div class="b c3">1</div>
-                            <div class="b c3">1</div>
-                            <div class="b c3">1</div>
-                            <div class="b c3">0</div>
-                        </div>
-                    </div>
-
-                    <!-- Brackets -->
-                    <div class="bracket-row">
-                        <div class="bracket-spacer"></div>
-                        <div class="bracket-group" style="width:calc(6*27px);">
-                            <div class="bracket-bar" style="width:85%; border-color:var(--c0);"></div>
-                            <div class="bracket-text" style="color:var(--c0);">(n>>18) & 0x3F = 19</div>
-                        </div>
-                        <div class="bracket-group" style="width:calc(6*27px + 6px);">
-                            <div class="bracket-bar" style="width:85%; border-color:var(--c1);"></div>
-                            <div class="bracket-text" style="color:var(--c1);">(n>>12) & 0x3F = 22</div>
-                        </div>
-                        <div class="bracket-group" style="width:calc(6*27px + 6px);">
-                            <div class="bracket-bar" style="width:85%; border-color:var(--c2);"></div>
-                            <div class="bracket-text" style="color:var(--c2);">(n>>6) & 0x3F = 5</div>
-                        </div>
-                        <div class="bracket-group" style="width:calc(6*27px + 6px);">
-                            <div class="bracket-bar" style="width:85%; border-color:var(--c3);"></div>
-                            <div class="bracket-text" style="color:var(--c3);">n & 0x3F = 46</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="height:8px;"></div>
-
-                <p style="font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:12px;">
-                    The operation: <strong style="color:var(--accent2);">&gt;&gt;</strong> shifts the group you want
-                    down to the bottom, then
-                    <strong style="color:var(--accent2);">&amp; 0x3F</strong> (binary <code>00111111</code>, decimal 63)
-                    masks off everything above bit 5, keeping only 6 bits.
-                </p>
-
-                <div class="out-row">
-                    <div class="ocard">
-                        <div class="oc-ch" style="color:var(--c0);">T</div>
-                        <div class="oc-sub">index 19</div>
-                    </div>
-                    <div class="ocard">
-                        <div class="oc-ch" style="color:var(--c1);">W</div>
-                        <div class="oc-sub">index 22</div>
-                    </div>
-                    <div class="ocard">
-                        <div class="oc-ch" style="color:var(--c2);">F</div>
-                        <div class="oc-sub">index 5</div>
-                    </div>
-                    <div class="ocard">
-                        <div class="oc-ch" style="color:var(--c3);">u</div>
-                        <div class="oc-sub">index 46</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="callout">
-                <strong>"Man" → "TWFu"</strong> — three bytes in, four characters out. The bits are the same; we just
-                drew the boundaries differently.
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>The operators, explained</h2>
-
-            <div class="tbl-wrap">
-                <table>
-                    <tr>
-                        <th>Operator</th>
-                        <th>Name</th>
-                        <th>What it does here</th>
-                    </tr>
-                    <tr>
-                        <td><code>&lt;&lt; n</code></td>
-                        <td>Left shift</td>
-                        <td>Moves bits <strong>n</strong> positions to the left, filling vacated positions with zeros.
-                            Used to place each byte into its lane within the 24-bit integer.
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><code>&gt;&gt; n</code></td>
-                        <td>Right shift</td>
-                        <td>Moves bits <strong>n</strong> positions to the right. Used to bring a 6-bit group down to
-                            the bottom so it can be masked.
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><code>|</code></td>
-                        <td>Bitwise OR</td>
-                        <td>"If either bit is 1, result is 1." Since our shifted values occupy different lanes (no
-                            overlapping 1-bits), OR merges them into one value. Think of it as "paste into these bit
-                            positions."
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><code>&amp;</code></td>
-                        <td>Bitwise AND</td>
-                        <td>"Keep only bits where <em>both</em> sides are 1." <code>&amp; 0x3F</code> keeps the lowest 6
-                            bits and zeros everything above — a mask.
-                        </td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Why 0x3F?</h2>
-
-            <p><code>0x3F</code> in binary is <code>00111111</code> — six 1-bits. In decimal: 2<sup>6</sup> − 1 = 63.
-                When you AND any value with <code>0x3F</code>, you keep only the lowest 6 bits and discard everything
-                above. This is the standard "extract N bits" pattern in C: shift the bits you want to the bottom, then
-                AND with (2<sup>N</sup> − 1).</p>
-        </div>
-
-    </div>
-
-    <!-- ════════════════════════════════════════════════ -->
-    <!-- TAB: REMAINDERS                                 -->
-    <!-- ════════════════════════════════════════════════ -->
-    <div class="tab-panel" id="tab-remainder">
-
-        <div class="section">
-            <h2>When input length isn't a multiple of 3</h2>
-
-            <p>The 3→4 encoding only works cleanly when you have complete triples. But input can be any length. After
-                processing all full triples, you're left with 0, 1, or 2 remaining bytes. These are the <strong>remainder</strong>
-                (or "tail") cases.</p>
-        </div>
-
-        <div class="section">
-            <h2>Remainder = 1 byte (8 bits → 2 characters)</h2>
-
-            <p>One byte gives us 8 bits. We need to represent them as 6-bit base64 characters. One character encodes 6
-                bits, two characters encode 12. So 2 characters are needed (1 would only give us 6 bits — not enough for
-                8).</p>
-
-            <p>The trick: we still shift the byte to the top of a 24-bit integer (<code>&lt;&lt; 16</code>), then
-                extract from the top as usual — but only output 2 characters instead of 4. The bottom 4 bits of the
-                second character are trailing zeros that the decoder discards.</p>
-
-            <div class="diagram">
-                <div class="diagram-title">Example: encoding "M" (1 byte: 77)</div>
-
-                <div class="scroll-hint">
-                    <div class="bit-row">
-                        <div class="bit-lbl"><span class="cr">77</span> &lt;&lt; 16</div>
-                        <div class="bits">
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                        </div>
-                    </div>
-
-                    <div style="height:8px;"></div>
-
-                    <div class="bit-row">
-                        <div class="bit-lbl" style="color:var(--text-dim);">extract 2 chars</div>
-                        <div class="bits">
-                            <div class="b c0">0</div>
-                            <div class="b c0">1</div>
-                            <div class="b c0">0</div>
-                            <div class="b c0">0</div>
-                            <div class="b c0">1</div>
-                            <div class="b c0">1</div>
-                            <div class="bsep"></div>
-                            <div class="b c1">0</div>
-                            <div class="b c1">1</div>
-                            <div class="b c1">0</div>
-                            <div class="b c1">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="bsep"></div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="height:6px;"></div>
-                <div class="out-row">
-                    <div class="ocard">
-                        <div class="oc-ch" style="color:var(--c0);">T</div>
-                        <div class="oc-sub">19 (all 6 bits real)</div>
-                    </div>
-                    <div class="ocard">
-                        <div class="oc-ch" style="color:var(--c1);">Q</div>
-                        <div class="oc-sub">16 (2 real + 4 zero)</div>
-                    </div>
-                    <div style="align-self:center; font-family:var(--mono); font-size:10px; color:var(--warn);">← 4
-                        trailing zero bits<br>discarded by decoder
-                    </div>
-                </div>
-
-                <div class="diagram-caption">"M" → "TQ" (not "TQ==" — we omit padding in base64url)</div>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Remainder = 2 bytes (16 bits → 3 characters)</h2>
-
-            <p>Two bytes = 16 bits. Two characters would only give 12 bits (not enough), three give 18 (enough). So 3
-                characters, with 2 trailing zero bits in the last one.</p>
-
-            <div class="diagram">
-                <div class="diagram-title">Example: encoding "Ma" (2 bytes: 77, 97)</div>
-
-                <div class="scroll-hint">
-                    <div class="bit-row">
-                        <div class="bit-lbl" style="color:var(--text-dim);">16 bits packed</div>
-                        <div class="bits">
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="bsep"></div>
-                            <div class="b g">0</div>
-                            <div class="b g">1</div>
-                            <div class="b g">1</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">1</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                        </div>
-                    </div>
-
-                    <div style="height:8px;"></div>
-
-                    <div class="bit-row">
-                        <div class="bit-lbl" style="color:var(--text-dim);">extract 3 chars</div>
-                        <div class="bits">
-                            <div class="b c0">0</div>
-                            <div class="b c0">1</div>
-                            <div class="b c0">0</div>
-                            <div class="b c0">0</div>
-                            <div class="b c0">1</div>
-                            <div class="b c0">1</div>
-                            <div class="bsep"></div>
-                            <div class="b c1">0</div>
-                            <div class="b c1">1</div>
-                            <div class="b c1">0</div>
-                            <div class="b c1">1</div>
-                            <div class="b c1">1</div>
-                            <div class="b c1">0</div>
-                            <div class="bsep"></div>
-                            <div class="b c2">0</div>
-                            <div class="b c2">0</div>
-                            <div class="b c2">0</div>
-                            <div class="b c2">1</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                            <div class="b z" style="opacity:0.3;">×</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="height:6px;"></div>
-                <div class="out-row">
-                    <div class="ocard">
-                        <div class="oc-ch" style="color:var(--c0);">T</div>
-                        <div class="oc-sub">19</div>
-                    </div>
-                    <div class="ocard">
-                        <div class="oc-ch" style="color:var(--c1);">W</div>
-                        <div class="oc-sub">22</div>
-                    </div>
-                    <div class="ocard">
-                        <div class="oc-ch" style="color:var(--c2);">E</div>
-                        <div class="oc-sub">4 (4 real + 2 zero)</div>
-                    </div>
-                    <div style="align-self:center; font-family:var(--mono); font-size:10px; color:var(--warn);">← 2
-                        trailing zero bits
-                    </div>
-                </div>
-
-                <div class="diagram-caption">"Ma" → "TWE"</div>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Summary table</h2>
-
-            <div class="tbl-wrap">
-                <table>
-                    <tr>
-                        <th>Remaining bytes</th>
-                        <th>Bits</th>
-                        <th>Output chars</th>
-                        <th>Bit capacity</th>
-                        <th>Wasted bits</th>
-                    </tr>
-                    <tr>
-                        <td>0</td>
-                        <td>0</td>
-                        <td>0</td>
-                        <td>—</td>
-                        <td>—</td>
-                    </tr>
-                    <tr>
-                        <td>1</td>
-                        <td>8</td>
-                        <td>2</td>
-                        <td>12</td>
-                        <td>4 trailing zeros</td>
-                    </tr>
-                    <tr>
-                        <td>2</td>
-                        <td>16</td>
-                        <td>3</td>
-                        <td>18</td>
-                        <td>2 trailing zeros</td>
-                    </tr>
-                </table>
-            </div>
-
-            <div class="callout">
-                <strong>No padding in base64url.</strong> Standard base64 appends <code>=</code> characters to fill out
-                the final group to 4 chars. Base64url skips this — the decoder calculates the tail length from <code>encoded_len
-                % 4</code>. A tail of 2 chars → 1 byte, 3 chars → 2 bytes, 1 char → invalid (6 bits can't represent a
-                whole byte).
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Output length formula</h2>
-
-            <p>Without padding: <code>output_len = ceil(input_len × 4 / 3)</code></p>
-
-            <p>Since C doesn't have a ceiling division operator, we use the standard integer trick: <code>ceil(a / b) =
-                (a + b − 1) / b</code>. So:</p>
-
-            <div class="codeblock">(<span class="num">input_len</span> * <span class="num">4</span> + <span class="num">2</span>)
-                / <span class="num">3</span> <span class="cm">// +2 because b-1 = 3-1 = 2</span></div>
-
-            <p>Verify: 3 bytes → (12+2)/3 = 4 ✓ · 1 byte → (4+2)/3 = 2 ✓ · 2 bytes → (8+2)/3 = 3 ✓ · 5 bytes → (20+2)/3
-                = 7 ✓</p>
-        </div>
-
-    </div>
-
-    <!-- ════════════════════════════════════════════════ -->
-    <!-- TAB: DECODING                                   -->
-    <!-- ════════════════════════════════════════════════ -->
-    <div class="tab-panel" id="tab-decoding">
-
-        <div class="section">
-            <h2>Decoding is the exact reverse</h2>
-
-            <p>Encoding takes 3 bytes, combines them, and slices into 4 characters. Decoding takes 4 characters,
-                combines their 6-bit values, and slices into 3 bytes. The shift amounts are mirrored:</p>
-
-            <div class="tbl-wrap">
-                <table>
-                    <tr>
-                        <th></th>
-                        <th>Encode (bytes → chars)</th>
-                        <th>Decode (chars → bytes)</th>
-                    </tr>
-                    <tr>
-                        <td>Pack</td>
-                        <td><code>(b0 &lt;&lt; 16) | (b1 &lt;&lt; 8) | b2</code></td>
-                        <td><code>(v0 &lt;&lt; 18) | (v1 &lt;&lt; 12) | (v2 &lt;&lt; 6) | v3</code></td>
-                    </tr>
-                    <tr>
-                        <td>Extract</td>
-                        <td><code>(n &gt;&gt; 18) &amp; 0x3F</code> etc.</td>
-                        <td><code>(n &gt;&gt; 16) &amp; 0xFF</code> etc.</td>
-                    </tr>
-                    <tr>
-                        <td>Group size</td>
-                        <td>3 in, 4 out</td>
-                        <td>4 in, 3 out</td>
-                    </tr>
-                    <tr>
-                        <td>Mask</td>
-                        <td><code>0x3F</code> (6 bits)</td>
-                        <td><code>0xFF</code> (8 bits, implicit via uint8_t cast)</td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Worked example: decoding "TWFu"</h2>
-
-            <div class="diagram">
-                <div class="diagram-title">Step 1 — Characters to 6-bit values via DEC_TABLE</div>
-                <div style="display:flex; gap:14px; justify-content:center; padding: 8px 0; flex-wrap:wrap;">
-                    <div style="text-align:center;">
-                        <div style="font-family:var(--mono); font-size:24px; font-weight:700; color:var(--c0);">T</div>
-                        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">→ 19</div>
-                        <div style="font-family:var(--mono); font-size:10px; color:var(--text-xdim);">010011</div>
-                    </div>
-                    <div style="text-align:center;">
-                        <div style="font-family:var(--mono); font-size:24px; font-weight:700; color:var(--c1);">W</div>
-                        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">→ 22</div>
-                        <div style="font-family:var(--mono); font-size:10px; color:var(--text-xdim);">010110</div>
-                    </div>
-                    <div style="text-align:center;">
-                        <div style="font-family:var(--mono); font-size:24px; font-weight:700; color:var(--c2);">F</div>
-                        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">→ 5</div>
-                        <div style="font-family:var(--mono); font-size:10px; color:var(--text-xdim);">000101</div>
-                    </div>
-                    <div style="text-align:center;">
-                        <div style="font-family:var(--mono); font-size:24px; font-weight:700; color:var(--c3);">u</div>
-                        <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">→ 46</div>
-                        <div style="font-family:var(--mono); font-size:10px; color:var(--text-xdim);">101110</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="diagram">
-                <div class="diagram-title">Step 2 — Pack four 6-bit values into 24 bits</div>
-
-                <div class="scroll-hint">
-                    <div class="bit-row">
-                        <div class="bit-lbl"><span style="color:var(--c0);">19</span> &lt;&lt; 18</div>
-                        <div class="bits">
-                            <div class="b c0">0</div>
-                            <div class="b c0">1</div>
-                            <div class="b c0">0</div>
-                            <div class="b c0">0</div>
-                            <div class="b c0">1</div>
-                            <div class="b c0">1</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                        </div>
-                    </div>
-                    <div class="bit-row">
-                        <div class="bit-lbl"><span style="color:var(--c1);">22</span> &lt;&lt; 12</div>
-                        <div class="bits">
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b c1">0</div>
-                            <div class="b c1">1</div>
-                            <div class="b c1">0</div>
-                            <div class="b c1">1</div>
-                            <div class="b c1">1</div>
-                            <div class="b c1">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                        </div>
-                    </div>
-                    <div class="bit-row">
-                        <div class="bit-lbl"><span style="color:var(--c2);">5</span> &lt;&lt; 6</div>
-                        <div class="bits">
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b c2">0</div>
-                            <div class="b c2">0</div>
-                            <div class="b c2">0</div>
-                            <div class="b c2">1</div>
-                            <div class="b c2">0</div>
-                            <div class="b c2">1</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                        </div>
-                    </div>
-                    <div class="bit-row">
-                        <div class="bit-lbl"><span style="color:var(--c3);">46</span></div>
-                        <div class="bits">
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="b z">0</div>
-                            <div class="bsep"></div>
-                            <div class="b c3">1</div>
-                            <div class="b c3">0</div>
-                            <div class="b c3">1</div>
-                            <div class="b c3">1</div>
-                            <div class="b c3">1</div>
-                            <div class="b c3">0</div>
-                        </div>
-                    </div>
-
-                    <div class="divider-row">
-                        <div class="div-lbl">OR (|) =</div>
-                        <div class="div-line"></div>
-                    </div>
-
-                    <div class="bit-row">
-                        <div class="bit-lbl" style="color:var(--text-b); font-weight:600;">n = 5,071,214</div>
-                        <div class="bits">
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="bsep"></div>
-                            <div class="b g">0</div>
-                            <div class="b g">1</div>
-                            <div class="b g">1</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">1</div>
-                            <div class="bsep"></div>
-                            <div class="b u">0</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">0</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">0</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="diagram-caption">
-                    Same 24-bit number as encoding produced — we just reconstructed it from characters instead of bytes.
-                </div>
-            </div>
-
-            <div class="diagram">
-                <div class="diagram-title">Step 3 — Extract 3 bytes</div>
-
-                <div class="scroll-hint">
-                    <div class="bit-row">
-                        <div class="bit-lbl" style="color:var(--text-dim);">n as 3×8</div>
-                        <div class="bits">
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="b r">1</div>
-                            <div class="b r">0</div>
-                            <div class="b r">1</div>
-                            <div class="bsep"></div>
-                            <div class="b g">0</div>
-                            <div class="b g">1</div>
-                            <div class="b g">1</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">0</div>
-                            <div class="b g">1</div>
-                            <div class="bsep"></div>
-                            <div class="b u">0</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">0</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">1</div>
-                            <div class="b u">0</div>
-                        </div>
-                    </div>
-
-                    <div class="bracket-row">
-                        <div class="bracket-spacer"></div>
-                        <div class="bracket-group" style="width:calc(8*27px);">
-                            <div class="bracket-bar" style="width:88%; border-color:var(--byte0);"></div>
-                            <div class="bracket-text" style="color:var(--byte0);">n>>16 = 77 → 'M'</div>
-                        </div>
-                        <div class="bracket-group" style="width:calc(8*27px + 6px);">
-                            <div class="bracket-bar" style="width:88%; border-color:var(--byte1);"></div>
-                            <div class="bracket-text" style="color:var(--byte1);">n>>8 = 97 → 'a'</div>
-                        </div>
-                        <div class="bracket-group" style="width:calc(8*27px + 6px);">
-                            <div class="bracket-bar" style="width:88%; border-color:var(--byte2);"></div>
-                            <div class="bracket-text" style="color:var(--byte2);">n = 110 → 'n'</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="diagram-caption">
-                    The <code>(uint8_t)</code> cast implicitly keeps only the lowest 8 bits — same as <code>&amp;
-                    0xFF</code> but the compiler does it for you.
-                </div>
-            </div>
-
-            <div class="callout">
-                "TWFu" → bytes 77, 97, 110 → "Man". Full circle.
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Decode tail handling</h2>
-
-            <div class="tbl-wrap">
-                <table>
-                    <tr>
-                        <th>Trailing chars</th>
-                        <th>Bits available</th>
-                        <th>Bytes produced</th>
-                        <th>Rationale</th>
-                    </tr>
-                    <tr>
-                        <td>0</td>
-                        <td>0</td>
-                        <td>0</td>
-                        <td>Clean boundary, nothing left.</td>
-                    </tr>
-                    <tr>
-                        <td>1</td>
-                        <td>6</td>
-                        <td style="color:var(--byte0); font-weight:600;">INVALID</td>
-                        <td>6 bits &lt; 8 bits. Can't produce a whole byte. This can't have come from a valid encode.
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>2</td>
-                        <td>12</td>
-                        <td>1</td>
-                        <td>12 ≥ 8. Top 8 bits are real, bottom 4 are trailing zeros from encode.</td>
-                    </tr>
-                    <tr>
-                        <td>3</td>
-                        <td>18</td>
-                        <td>2</td>
-                        <td>18 ≥ 16. Top 16 bits are real, bottom 2 are trailing zeros.</td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- ════════════════════════════════════════════════ -->
-    <!-- TAB: IMPLEMENTATION                             -->
-    <!-- ════════════════════════════════════════════════ -->
-    <div class="tab-panel" id="tab-impl">
-
-        <div class="section">
-            <h2>Two-phase loop structure</h2>
-
-            <p>Both encode and decode process in two phases: first the "full" groups (triples for encode, quads for
-                decode) in a tight loop, then handle the remainder separately. This avoids any branching inside the hot
-                path.</p>
-
-            <div class="codeblock"><span class="cm">// Phase 1: full groups (no branching inside)</span>
-                <span class="kw">for</span> (size_t i = <span class="num">0</span>; i < full_triples; i++) {
-                <span class="cm">// pack → extract → store (always 3 in, 4 out)</span>
-                }
-
-                <span class="cm">// Phase 2: handle 0, 1, or 2 remaining bytes</span>
-                <span class="kw">if</span> (remainder == <span class="num">1</span>) { <span class="cm">/* 1 byte → 2 chars */</span>
-                }
-                <span class="kw">else if</span> (remainder == <span class="num">2</span>) { <span class="cm">/* 2 bytes → 3 chars */</span>
-                }
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>The DEC_TABLE ambiguity problem</h2>
-
-            <p>The decode table is a 256-entry array where <code>DEC_TABLE['B']</code> returns <code>1</code>, <code>DEC_TABLE['z']</code>
-                returns <code>51</code>, and so on. The problem: <code>DEC_TABLE['A']</code> returns <code>0</code>, but
-                so does <code>DEC_TABLE['!']</code> or <code>DEC_TABLE['@']</code> — because all uninitialized entries
-                are zero by default in C.</p>
-
-            <p>You cannot distinguish "this is the letter A, which legitimately maps to 0" from "this is an invalid
-                character that happens to be 0." So the code validates all characters <strong>before</strong> decoding,
-                using a simple range-check function:</p>
-
-            <div class="codeblock"><span class="kw">static int</span> is_valid_b64char(<span
-                    class="kw">const char</span> c) {
-                <span class="kw">if</span> (c >= <span class="str">'A'</span> && c <= <span class="str">'Z'</span>)
-                <span class="kw">return</span> <span class="num">1</span>;
-                <span class="kw">if</span> (c >= <span class="str">'a'</span> && c <= <span class="str">'z'</span>)
-                <span class="kw">return</span> <span class="num">1</span>;
-                <span class="kw">if</span> (c >= <span class="str">'0'</span> && c <= <span class="str">'9'</span>)
-                <span class="kw">return</span> <span class="num">1</span>;
-                <span class="kw">if</span> (c == <span class="str">'-'</span> || c == <span class="str">'_'</span>)
-                <span class="kw">return</span> <span class="num">1</span>;
-                <span class="kw">return</span> <span class="num">0</span>;
-                }
-            </div>
-
-            <div class="callout">
-                An alternative approach used by some libraries: fill invalid entries with a sentinel like
-                <code>0xFF</code> (255) instead of leaving them at 0. Then the table itself can detect invalid
-                characters and you don't need a separate validation pass. Our implementation chose the explicit
-                validation approach — simpler to read, same result.
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>The (unsigned char) cast on decode</h2>
-
-            <p>In C, <code>char</code> may be signed (typically −128 to 127) on some platforms. If you index an array
-                with a negative value, you're reading outside the array bounds — undefined behavior. The cast <code>(unsigned
-                    char) in[si]</code> ensures the index is always 0–255:</p>
-
-            <div class="codeblock">DEC_TABLE[(<span class="kw">unsigned char</span>) in[si]] <span class="cm">// always 0–255, safe</span>
-                DEC_TABLE[in[si]] <span class="cm">// could be negative if char is signed!</span></div>
-        </div>
-
-        <div class="section">
-            <h2>The (uint32_t) cast on encode</h2>
-
-            <p><code>in[si]</code> is a <code>uint8_t</code> — an 8-bit value. When you write <code>in[si] &lt;&lt;
-                16</code>, C promotes it to <code>int</code> (typically 32-bit signed). For values ≤ 127 this works
-                fine, but for larger byte values the result might not be what you expect with signed arithmetic. The
-                explicit <code>(uint32_t)</code> cast makes the promotion to unsigned 32-bit explicit and safe for all
-                byte values 0–255.</p>
-        </div>
-
-        <div class="section">
-            <h2>Length formulas cheat sheet</h2>
-
-            <div class="tbl-wrap">
-                <table>
-                    <tr>
-                        <th>Direction</th>
-                        <th>Formula</th>
-                        <th>C expression</th>
-                        <th>Note</th>
-                    </tr>
-                    <tr>
-                        <td>Encode output</td>
-                        <td>⌈n × 4 / 3⌉</td>
-                        <td><code>(n * 4 + 2) / 3</code></td>
-                        <td>Exact length (no padding)</td>
-                    </tr>
-                    <tr>
-                        <td>Encode buffer</td>
-                        <td>⌈n × 4 / 3⌉ + 1</td>
-                        <td><code>(n * 4 + 2) / 3 + 1</code></td>
-                        <td>+1 for NUL terminator</td>
-                    </tr>
-                    <tr>
-                        <td>Decode output</td>
-                        <td>⌊n × 3 / 4⌋</td>
-                        <td><code>(n * 3) / 4</code></td>
-                        <td>Maximum bytes; actual may be 1–2 less</td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Complete encode/decode at a glance</h2>
-
-            <div class="diagram" style="padding: 20px 24px;">
-                <div style="font-family:var(--mono); font-size:12px; line-height: 2.2;">
-                    <div style="color:var(--text-dim); margin-bottom: 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">
-                        Encode pipeline
-                    </div>
-                    <span style="color:var(--byte0);">bytes</span>
-                    <span style="color:var(--text-xdim); margin: 0 8px;">→ group by 3 →</span>
-                    <span style="color:var(--text-dim);">(b0&lt;&lt;16)|(b1&lt;&lt;8)|b2</span>
-                    <span style="color:var(--text-xdim); margin: 0 8px;">→</span>
-                    <span style="color:var(--accent2);">24-bit int</span>
-                    <span style="color:var(--text-xdim); margin: 0 8px;">→ shift &amp; mask →</span>
-                    <span style="color:var(--c1);">4 × 6-bit index</span>
-                    <span style="color:var(--text-xdim); margin: 0 8px;">→ ENC_TABLE[] →</span>
-                    <span style="color:var(--text-b);">4 chars</span>
-
-                    <div style="color:var(--text-dim); margin: 16px 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">
-                        Decode pipeline
-                    </div>
-                    <span style="color:var(--text-b);">chars</span>
-                    <span style="color:var(--text-xdim); margin: 0 8px;">→ group by 4 → DEC_TABLE[] →</span>
-                    <span style="color:var(--c1);">4 × 6-bit values</span>
-                    <span style="color:var(--text-xdim); margin: 0 8px;">→</span>
-                    <span style="color:var(--text-dim);">(v0&lt;&lt;18)|(v1&lt;&lt;12)|(v2&lt;&lt;6)|v3</span>
-                    <span style="color:var(--text-xdim); margin: 0 8px;">→</span>
-                    <span style="color:var(--accent2);">24-bit int</span>
-                    <span style="color:var(--text-xdim); margin: 0 8px;">→ shift →</span>
-                    <span style="color:var(--byte0);">3 bytes</span>
-                </div>
-            </div>
-        </div>
-
-    </div>
+	<div class="page-header">
+		<h1>base64url from first principles</h1>
+		<div class="sub">RFC 4648 §5 · url-safe alphabet · no padding · for developers who want the full picture</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="problem">The Problem</button>
+		<button class="tab-btn" data-tab="alphabet">The Alphabet</button>
+		<button class="tab-btn" data-tab="encoding">Encoding</button>
+		<button class="tab-btn" data-tab="remainder">Remainders</button>
+		<button class="tab-btn" data-tab="decoding">Decoding</button>
+		<button class="tab-btn" data-tab="impl">Implementation</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE PROBLEM                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-problem">
+
+		<div class="section">
+			<h2>Why does base64 exist?</h2>
+
+			<p>Many transport protocols — email (SMTP), HTTP headers, URLs, JSON — were designed for
+				<strong>text</strong>. They use certain bytes as control characters: newlines terminate headers,
+				<code>NUL</code>
+				terminates C strings, <code>+</code> means "space" in a URL query, <code>/</code> separates path
+				segments, <code>"</code> delimits JSON strings.</p>
+
+			<p>Now imagine you need to send a cryptographic signature, a compressed blob, or a JPEG through one of these
+				channels. Raw binary will inevitably contain bytes that collide with the protocol's special characters.
+				You'd get truncated data, misparses, or silent corruption.</p>
+
+			<p><strong>Base64 solves this by encoding arbitrary binary data using only 64 characters that are safe in
+				virtually all text contexts.</strong> The tradeoff is size: 3 input bytes become 4 output characters — a
+				~33% expansion. That's the cost of universality.</p>
+		</div>
+
+		<div class="section">
+			<h2>Why "url-safe"?</h2>
+
+			<p>Standard base64 (RFC 4648 §4) uses <code>+</code> and <code>/</code> as its 62nd and 63rd characters.
+				Both are problematic in URLs: <code>+</code> is interpreted as a space in query strings, and
+				<code>/</code> is a path separator. So you'd have to percent-encode them (<code>%2B</code>,
+				<code>%2F</code>), which defeats the purpose of a compact encoding.</p>
+
+			<p>Base64url (RFC 4648 §5) replaces them with <code>-</code> and <code>_</code>, which are unreserved in
+				URLs. It also typically omits the <code>=</code> padding characters, since the decoder can infer the
+				original length from the encoded string's length.</p>
+
+			<p>This makes base64url the standard encoding for JWTs, JWKs, and most modern web token formats — which is
+				exactly the context in our credential issuance system.</p>
+		</div>
+
+		<div class="section">
+			<h2>The core contract</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">Encoding ratio</div>
+				<div style="font-family:var(--mono); font-size: 14px; text-align:center; padding: 10px 0;">
+					<span class="cr">3 bytes</span>
+					<span style="color:var(--text-dim); margin: 0 12px;">→</span>
+					<span style="color:var(--text-dim);">24 bits</span>
+					<span style="color:var(--text-dim); margin: 0 12px;">→</span>
+					<span class="cp">4 × 6-bit values</span>
+					<span style="color:var(--text-dim); margin: 0 12px;">→</span>
+					<span class="cy">4 ASCII characters</span>
+				</div>
+				<div class="diagram-caption">
+					Every group of 3 input bytes (24 bits) maps to exactly 4 output characters.<br>
+					The key insight: <strong>24 is the least common multiple of 8 and 6</strong>, so 24 bits is where
+					the byte boundary and the base64-character boundary align cleanly.
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE ALPHABET                               -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-alphabet">
+
+		<div class="section">
+			<h2>Why 6 bits = 64 characters</h2>
+
+			<p>A single bit gives you 2 values (0 or 1). Each additional bit doubles the range. With 6 bits you get
+				2<sup>6</sup> = <strong>64</strong> possible values (0–63). That's enough to index into an alphabet of
+				64 printable ASCII characters, and it divides evenly into 24 — which is the key property that makes the
+				3-byte → 4-character mapping work.</p>
+
+			<p>Why not 7 bits (128 chars)? You'd need 128 printable characters that are safe everywhere — there aren't
+				enough. Why not 5 bits (32 chars)? That works (it's base32), but the expansion ratio is worse: 5 bytes →
+				8 characters (60% overhead vs. 33%).</p>
+
+			<p>6 bits is the sweet spot: large enough alphabet to keep expansion low, small enough to stay within safe
+				printable ASCII.</p>
+		</div>
+
+		<div class="section">
+			<h2>The 64-character table</h2>
+
+			<p>The position in this table <strong>is</strong> the 6-bit value. Character at index 0 is <code>A</code>,
+				at index 25 is <code>Z</code>, at index 62 is <code>-</code>, at index 63 is <code>_</code>.</p>
+
+			<div class="alpha-grid" id="alpha-grid"></div>
+
+			<p>In code, this is just a string literal — the index operator gives you the character:</p>
+
+			<div class="codeblock"><span class="kw">static const char</span> ENC_TABLE[] = <span class="str">"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"</span>;
+
+				<span class="cm">// ENC_TABLE[0]  → 'A'</span>
+				<span class="cm">// ENC_TABLE[25] → 'Z'</span>
+				<span class="cm">// ENC_TABLE[52] → '0'</span>
+				<span class="cm">// ENC_TABLE[63] → '_'</span></div>
+		</div>
+
+		<div class="section">
+			<h2>Standard vs. url-safe</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Index</th>
+						<th>Standard (RFC 4648 §4)</th>
+						<th>URL-safe (RFC 4648 §5)</th>
+						<th>Why the change</th>
+					</tr>
+					<tr>
+						<td>62</td>
+						<td><code>+</code></td>
+						<td><code>-</code></td>
+						<td><code>+</code> means space in URL query strings</td>
+					</tr>
+					<tr>
+						<td>63</td>
+						<td><code>/</code></td>
+						<td><code>_</code></td>
+						<td><code>/</code> is a URL path separator</td>
+					</tr>
+					<tr>
+						<td>padding</td>
+						<td><code>=</code></td>
+						<td>omitted</td>
+						<td><code>=</code> is the assignment operator in query params</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Characters 0–61 are identical in both variants.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: ENCODING                                   -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-encoding">
+
+		<div class="section">
+			<h2>Worked example: encoding "Man"</h2>
+
+			<p><code>"Man"</code> is the classic RFC example. Three ASCII characters, three bytes, one complete group
+				with no remainder — the simplest case.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 1 — Text to bytes</div>
+				<div style="display:flex; gap:14px; justify-content:center; padding: 8px 0;">
+					<div style="text-align:center;">
+						<div style="font-family:var(--mono); font-size:28px; font-weight:700; color:var(--byte0);">M
+						</div>
+						<div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">77 · 0x4D</div>
+					</div>
+					<div style="text-align:center;">
+						<div style="font-family:var(--mono); font-size:28px; font-weight:700; color:var(--byte1);">a
+						</div>
+						<div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">97 · 0x61</div>
+					</div>
+					<div style="text-align:center;">
+						<div style="font-family:var(--mono); font-size:28px; font-weight:700; color:var(--byte2);">n
+						</div>
+						<div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">110 · 0x6E</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 2 — Pack 3 bytes into a 24-bit integer</div>
+
+				<p style="font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:16px;">
+					We need one contiguous 24-bit value so we can slice it differently (into 6-bit groups instead of
+					8-bit bytes). The way we combine them: shift each byte to its lane, then OR them together.
+				</p>
+
+				<div class="scroll-hint">
+					<!-- byte0 << 16 -->
+					<div class="bit-row">
+						<div class="bit-lbl"><span class="cr">77</span> &lt;&lt; 16</div>
+						<div class="bits">
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+						</div>
+					</div>
+					<!-- byte1 << 8 -->
+					<div class="bit-row">
+						<div class="bit-lbl"><span class="cg">97</span> &lt;&lt; 8</div>
+						<div class="bits">
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b g">0</div>
+							<div class="b g">1</div>
+							<div class="b g">1</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">1</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+						</div>
+					</div>
+					<!-- byte2 -->
+					<div class="bit-row">
+						<div class="bit-lbl"><span class="cb">110</span></div>
+						<div class="bits">
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b u">0</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">0</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">0</div>
+						</div>
+					</div>
+
+					<!-- OR divider -->
+					<div class="divider-row">
+						<div class="div-lbl">OR (|) =</div>
+						<div class="div-line"></div>
+					</div>
+
+					<!-- Combined -->
+					<div class="bit-row">
+						<div class="bit-lbl" style="color:var(--text-b); font-weight:600;">n = 5,071,214</div>
+						<div class="bits">
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="bsep"></div>
+							<div class="b g">0</div>
+							<div class="b g">1</div>
+							<div class="b g">1</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">1</div>
+							<div class="bsep"></div>
+							<div class="b u">0</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">0</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">0</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					<code>&lt;&lt; 16</code> moves byte 0 to bits 23–16. <code>&lt;&lt; 8</code> moves byte 1 to bits
+					15–8. Byte 2 stays at bits 7–0.
+					Since they occupy different bit lanes, <code>|</code> (OR) merges them with no interference — it's
+					just "place this value here."
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 3 — Slice into four 6-bit groups</div>
+
+				<p style="font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:16px;">
+					Same 24 bits, different grouping. Instead of 8-8-8, we read 6-6-6-6.
+				</p>
+
+				<div class="scroll-hint">
+					<!-- Colored as 4x6 -->
+					<div class="bit-row">
+						<div class="bit-lbl" style="color:var(--text-b); font-weight:600;">n as 4×6</div>
+						<div class="bits">
+							<div class="b c0">0</div>
+							<div class="b c0">1</div>
+							<div class="b c0">0</div>
+							<div class="b c0">0</div>
+							<div class="b c0">1</div>
+							<div class="b c0">1</div>
+							<div class="bsep"></div>
+							<div class="b c1">0</div>
+							<div class="b c1">1</div>
+							<div class="b c1">0</div>
+							<div class="b c1">1</div>
+							<div class="b c1">1</div>
+							<div class="b c1">0</div>
+							<div class="bsep"></div>
+							<div class="b c2">0</div>
+							<div class="b c2">0</div>
+							<div class="b c2">0</div>
+							<div class="b c2">1</div>
+							<div class="b c2">0</div>
+							<div class="b c2">1</div>
+							<div class="bsep"></div>
+							<div class="b c3">1</div>
+							<div class="b c3">0</div>
+							<div class="b c3">1</div>
+							<div class="b c3">1</div>
+							<div class="b c3">1</div>
+							<div class="b c3">0</div>
+						</div>
+					</div>
+
+					<!-- Brackets -->
+					<div class="bracket-row">
+						<div class="bracket-spacer"></div>
+						<div class="bracket-group" style="width:calc(6*27px);">
+							<div class="bracket-bar" style="width:85%; border-color:var(--c0);"></div>
+							<div class="bracket-text" style="color:var(--c0);">(n>>18) & 0x3F = 19</div>
+						</div>
+						<div class="bracket-group" style="width:calc(6*27px + 6px);">
+							<div class="bracket-bar" style="width:85%; border-color:var(--c1);"></div>
+							<div class="bracket-text" style="color:var(--c1);">(n>>12) & 0x3F = 22</div>
+						</div>
+						<div class="bracket-group" style="width:calc(6*27px + 6px);">
+							<div class="bracket-bar" style="width:85%; border-color:var(--c2);"></div>
+							<div class="bracket-text" style="color:var(--c2);">(n>>6) & 0x3F = 5</div>
+						</div>
+						<div class="bracket-group" style="width:calc(6*27px + 6px);">
+							<div class="bracket-bar" style="width:85%; border-color:var(--c3);"></div>
+							<div class="bracket-text" style="color:var(--c3);">n & 0x3F = 46</div>
+						</div>
+					</div>
+				</div>
+
+				<div style="height:8px;"></div>
+
+				<p style="font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+					The operation: <strong style="color:var(--accent2);">&gt;&gt;</strong> shifts the group you want
+					down to the bottom, then
+					<strong style="color:var(--accent2);">&amp; 0x3F</strong> (binary <code>00111111</code>, decimal 63)
+					masks off everything above bit 5, keeping only 6 bits.
+				</p>
+
+				<div class="out-row">
+					<div class="ocard">
+						<div class="oc-ch" style="color:var(--c0);">T</div>
+						<div class="oc-sub">index 19</div>
+					</div>
+					<div class="ocard">
+						<div class="oc-ch" style="color:var(--c1);">W</div>
+						<div class="oc-sub">index 22</div>
+					</div>
+					<div class="ocard">
+						<div class="oc-ch" style="color:var(--c2);">F</div>
+						<div class="oc-sub">index 5</div>
+					</div>
+					<div class="ocard">
+						<div class="oc-ch" style="color:var(--c3);">u</div>
+						<div class="oc-sub">index 46</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="callout">
+				<strong>"Man" → "TWFu"</strong> — three bytes in, four characters out. The bits are the same; we just
+				drew the boundaries differently.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The operators, explained</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Operator</th>
+						<th>Name</th>
+						<th>What it does here</th>
+					</tr>
+					<tr>
+						<td><code>&lt;&lt; n</code></td>
+						<td>Left shift</td>
+						<td>Moves bits <strong>n</strong> positions to the left, filling vacated positions with zeros.
+							Used to place each byte into its lane within the 24-bit integer.
+						</td>
+					</tr>
+					<tr>
+						<td><code>&gt;&gt; n</code></td>
+						<td>Right shift</td>
+						<td>Moves bits <strong>n</strong> positions to the right. Used to bring a 6-bit group down to
+							the bottom so it can be masked.
+						</td>
+					</tr>
+					<tr>
+						<td><code>|</code></td>
+						<td>Bitwise OR</td>
+						<td>"If either bit is 1, result is 1." Since our shifted values occupy different lanes (no
+							overlapping 1-bits), OR merges them into one value. Think of it as "paste into these bit
+							positions."
+						</td>
+					</tr>
+					<tr>
+						<td><code>&amp;</code></td>
+						<td>Bitwise AND</td>
+						<td>"Keep only bits where <em>both</em> sides are 1." <code>&amp; 0x3F</code> keeps the lowest 6
+							bits and zeros everything above — a mask.
+						</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Why 0x3F?</h2>
+
+			<p><code>0x3F</code> in binary is <code>00111111</code> — six 1-bits. In decimal: 2<sup>6</sup> − 1 = 63.
+				When you AND any value with <code>0x3F</code>, you keep only the lowest 6 bits and discard everything
+				above. This is the standard "extract N bits" pattern in C: shift the bits you want to the bottom, then
+				AND with (2<sup>N</sup> − 1).</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: REMAINDERS                                 -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-remainder">
+
+		<div class="section">
+			<h2>When input length isn't a multiple of 3</h2>
+
+			<p>The 3→4 encoding only works cleanly when you have complete triples. But input can be any length. After
+				processing all full triples, you're left with 0, 1, or 2 remaining bytes. These are the
+				<strong>remainder</strong>
+				(or "tail") cases.</p>
+		</div>
+
+		<div class="section">
+			<h2>Remainder = 1 byte (8 bits → 2 characters)</h2>
+
+			<p>One byte gives us 8 bits. We need to represent them as 6-bit base64 characters. One character encodes 6
+				bits, two characters encode 12. So 2 characters are needed (1 would only give us 6 bits — not enough for
+				8).</p>
+
+			<p>The trick: we still shift the byte to the top of a 24-bit integer (<code>&lt;&lt; 16</code>), then
+				extract from the top as usual — but only output 2 characters instead of 4. The bottom 4 bits of the
+				second character are trailing zeros that the decoder discards.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Example: encoding "M" (1 byte: 77)</div>
+
+				<div class="scroll-hint">
+					<div class="bit-row">
+						<div class="bit-lbl"><span class="cr">77</span> &lt;&lt; 16</div>
+						<div class="bits">
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+						</div>
+					</div>
+
+					<div style="height:8px;"></div>
+
+					<div class="bit-row">
+						<div class="bit-lbl" style="color:var(--text-dim);">extract 2 chars</div>
+						<div class="bits">
+							<div class="b c0">0</div>
+							<div class="b c0">1</div>
+							<div class="b c0">0</div>
+							<div class="b c0">0</div>
+							<div class="b c0">1</div>
+							<div class="b c0">1</div>
+							<div class="bsep"></div>
+							<div class="b c1">0</div>
+							<div class="b c1">1</div>
+							<div class="b c1">0</div>
+							<div class="b c1">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="bsep"></div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+						</div>
+					</div>
+				</div>
+
+				<div style="height:6px;"></div>
+				<div class="out-row">
+					<div class="ocard">
+						<div class="oc-ch" style="color:var(--c0);">T</div>
+						<div class="oc-sub">19 (all 6 bits real)</div>
+					</div>
+					<div class="ocard">
+						<div class="oc-ch" style="color:var(--c1);">Q</div>
+						<div class="oc-sub">16 (2 real + 4 zero)</div>
+					</div>
+					<div style="align-self:center; font-family:var(--mono); font-size:10px; color:var(--warn);">← 4
+						trailing zero bits<br>discarded by decoder
+					</div>
+				</div>
+
+				<div class="diagram-caption">"M" → "TQ" (not "TQ==" — we omit padding in base64url)</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Remainder = 2 bytes (16 bits → 3 characters)</h2>
+
+			<p>Two bytes = 16 bits. Two characters would only give 12 bits (not enough), three give 18 (enough). So 3
+				characters, with 2 trailing zero bits in the last one.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Example: encoding "Ma" (2 bytes: 77, 97)</div>
+
+				<div class="scroll-hint">
+					<div class="bit-row">
+						<div class="bit-lbl" style="color:var(--text-dim);">16 bits packed</div>
+						<div class="bits">
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="bsep"></div>
+							<div class="b g">0</div>
+							<div class="b g">1</div>
+							<div class="b g">1</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">1</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+						</div>
+					</div>
+
+					<div style="height:8px;"></div>
+
+					<div class="bit-row">
+						<div class="bit-lbl" style="color:var(--text-dim);">extract 3 chars</div>
+						<div class="bits">
+							<div class="b c0">0</div>
+							<div class="b c0">1</div>
+							<div class="b c0">0</div>
+							<div class="b c0">0</div>
+							<div class="b c0">1</div>
+							<div class="b c0">1</div>
+							<div class="bsep"></div>
+							<div class="b c1">0</div>
+							<div class="b c1">1</div>
+							<div class="b c1">0</div>
+							<div class="b c1">1</div>
+							<div class="b c1">1</div>
+							<div class="b c1">0</div>
+							<div class="bsep"></div>
+							<div class="b c2">0</div>
+							<div class="b c2">0</div>
+							<div class="b c2">0</div>
+							<div class="b c2">1</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+							<div class="b z" style="opacity:0.3;">×</div>
+						</div>
+					</div>
+				</div>
+
+				<div style="height:6px;"></div>
+				<div class="out-row">
+					<div class="ocard">
+						<div class="oc-ch" style="color:var(--c0);">T</div>
+						<div class="oc-sub">19</div>
+					</div>
+					<div class="ocard">
+						<div class="oc-ch" style="color:var(--c1);">W</div>
+						<div class="oc-sub">22</div>
+					</div>
+					<div class="ocard">
+						<div class="oc-ch" style="color:var(--c2);">E</div>
+						<div class="oc-sub">4 (4 real + 2 zero)</div>
+					</div>
+					<div style="align-self:center; font-family:var(--mono); font-size:10px; color:var(--warn);">← 2
+						trailing zero bits
+					</div>
+				</div>
+
+				<div class="diagram-caption">"Ma" → "TWE"</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Summary table</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Remaining bytes</th>
+						<th>Bits</th>
+						<th>Output chars</th>
+						<th>Bit capacity</th>
+						<th>Wasted bits</th>
+					</tr>
+					<tr>
+						<td>0</td>
+						<td>0</td>
+						<td>0</td>
+						<td>—</td>
+						<td>—</td>
+					</tr>
+					<tr>
+						<td>1</td>
+						<td>8</td>
+						<td>2</td>
+						<td>12</td>
+						<td>4 trailing zeros</td>
+					</tr>
+					<tr>
+						<td>2</td>
+						<td>16</td>
+						<td>3</td>
+						<td>18</td>
+						<td>2 trailing zeros</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>No padding in base64url.</strong> Standard base64 appends <code>=</code> characters to fill out
+				the final group to 4 chars. Base64url skips this — the decoder calculates the tail length from <code>encoded_len
+				% 4</code>. A tail of 2 chars → 1 byte, 3 chars → 2 bytes, 1 char → invalid (6 bits can't represent a
+				whole byte).
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Output length formula</h2>
+
+			<p>Without padding: <code>output_len = ceil(input_len × 4 / 3)</code></p>
+
+			<p>Since C doesn't have a ceiling division operator, we use the standard integer trick: <code>ceil(a / b) =
+				(a + b − 1) / b</code>. So:</p>
+
+			<div class="codeblock">(<span class="num">input_len</span> * <span class="num">4</span> + <span
+				class="num">2</span>)
+				/ <span class="num">3</span> <span class="cm">// +2 because b-1 = 3-1 = 2</span></div>
+
+			<p>Verify: 3 bytes → (12+2)/3 = 4 ✓ · 1 byte → (4+2)/3 = 2 ✓ · 2 bytes → (8+2)/3 = 3 ✓ · 5 bytes → (20+2)/3
+				= 7 ✓</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: DECODING                                   -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-decoding">
+
+		<div class="section">
+			<h2>Decoding is the exact reverse</h2>
+
+			<p>Encoding takes 3 bytes, combines them, and slices into 4 characters. Decoding takes 4 characters,
+				combines their 6-bit values, and slices into 3 bytes. The shift amounts are mirrored:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th></th>
+						<th>Encode (bytes → chars)</th>
+						<th>Decode (chars → bytes)</th>
+					</tr>
+					<tr>
+						<td>Pack</td>
+						<td><code>(b0 &lt;&lt; 16) | (b1 &lt;&lt; 8) | b2</code></td>
+						<td><code>(v0 &lt;&lt; 18) | (v1 &lt;&lt; 12) | (v2 &lt;&lt; 6) | v3</code></td>
+					</tr>
+					<tr>
+						<td>Extract</td>
+						<td><code>(n &gt;&gt; 18) &amp; 0x3F</code> etc.</td>
+						<td><code>(n &gt;&gt; 16) &amp; 0xFF</code> etc.</td>
+					</tr>
+					<tr>
+						<td>Group size</td>
+						<td>3 in, 4 out</td>
+						<td>4 in, 3 out</td>
+					</tr>
+					<tr>
+						<td>Mask</td>
+						<td><code>0x3F</code> (6 bits)</td>
+						<td><code>0xFF</code> (8 bits, implicit via uint8_t cast)</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Worked example: decoding "TWFu"</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 1 — Characters to 6-bit values via DEC_TABLE</div>
+				<div style="display:flex; gap:14px; justify-content:center; padding: 8px 0; flex-wrap:wrap;">
+					<div style="text-align:center;">
+						<div style="font-family:var(--mono); font-size:24px; font-weight:700; color:var(--c0);">T</div>
+						<div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">→ 19</div>
+						<div style="font-family:var(--mono); font-size:10px; color:var(--text-xdim);">010011</div>
+					</div>
+					<div style="text-align:center;">
+						<div style="font-family:var(--mono); font-size:24px; font-weight:700; color:var(--c1);">W</div>
+						<div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">→ 22</div>
+						<div style="font-family:var(--mono); font-size:10px; color:var(--text-xdim);">010110</div>
+					</div>
+					<div style="text-align:center;">
+						<div style="font-family:var(--mono); font-size:24px; font-weight:700; color:var(--c2);">F</div>
+						<div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">→ 5</div>
+						<div style="font-family:var(--mono); font-size:10px; color:var(--text-xdim);">000101</div>
+					</div>
+					<div style="text-align:center;">
+						<div style="font-family:var(--mono); font-size:24px; font-weight:700; color:var(--c3);">u</div>
+						<div style="font-family:var(--mono); font-size:11px; color:var(--text-dim);">→ 46</div>
+						<div style="font-family:var(--mono); font-size:10px; color:var(--text-xdim);">101110</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 2 — Pack four 6-bit values into 24 bits</div>
+
+				<div class="scroll-hint">
+					<div class="bit-row">
+						<div class="bit-lbl"><span style="color:var(--c0);">19</span> &lt;&lt; 18</div>
+						<div class="bits">
+							<div class="b c0">0</div>
+							<div class="b c0">1</div>
+							<div class="b c0">0</div>
+							<div class="b c0">0</div>
+							<div class="b c0">1</div>
+							<div class="b c0">1</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+						</div>
+					</div>
+					<div class="bit-row">
+						<div class="bit-lbl"><span style="color:var(--c1);">22</span> &lt;&lt; 12</div>
+						<div class="bits">
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b c1">0</div>
+							<div class="b c1">1</div>
+							<div class="b c1">0</div>
+							<div class="b c1">1</div>
+							<div class="b c1">1</div>
+							<div class="b c1">0</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+						</div>
+					</div>
+					<div class="bit-row">
+						<div class="bit-lbl"><span style="color:var(--c2);">5</span> &lt;&lt; 6</div>
+						<div class="bits">
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b c2">0</div>
+							<div class="b c2">0</div>
+							<div class="b c2">0</div>
+							<div class="b c2">1</div>
+							<div class="b c2">0</div>
+							<div class="b c2">1</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+						</div>
+					</div>
+					<div class="bit-row">
+						<div class="bit-lbl"><span style="color:var(--c3);">46</span></div>
+						<div class="bits">
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="b z">0</div>
+							<div class="bsep"></div>
+							<div class="b c3">1</div>
+							<div class="b c3">0</div>
+							<div class="b c3">1</div>
+							<div class="b c3">1</div>
+							<div class="b c3">1</div>
+							<div class="b c3">0</div>
+						</div>
+					</div>
+
+					<div class="divider-row">
+						<div class="div-lbl">OR (|) =</div>
+						<div class="div-line"></div>
+					</div>
+
+					<div class="bit-row">
+						<div class="bit-lbl" style="color:var(--text-b); font-weight:600;">n = 5,071,214</div>
+						<div class="bits">
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="bsep"></div>
+							<div class="b g">0</div>
+							<div class="b g">1</div>
+							<div class="b g">1</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">1</div>
+							<div class="bsep"></div>
+							<div class="b u">0</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">0</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">0</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					Same 24-bit number as encoding produced — we just reconstructed it from characters instead of bytes.
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 3 — Extract 3 bytes</div>
+
+				<div class="scroll-hint">
+					<div class="bit-row">
+						<div class="bit-lbl" style="color:var(--text-dim);">n as 3×8</div>
+						<div class="bits">
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="b r">1</div>
+							<div class="b r">0</div>
+							<div class="b r">1</div>
+							<div class="bsep"></div>
+							<div class="b g">0</div>
+							<div class="b g">1</div>
+							<div class="b g">1</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">0</div>
+							<div class="b g">1</div>
+							<div class="bsep"></div>
+							<div class="b u">0</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">0</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">1</div>
+							<div class="b u">0</div>
+						</div>
+					</div>
+
+					<div class="bracket-row">
+						<div class="bracket-spacer"></div>
+						<div class="bracket-group" style="width:calc(8*27px);">
+							<div class="bracket-bar" style="width:88%; border-color:var(--byte0);"></div>
+							<div class="bracket-text" style="color:var(--byte0);">n>>16 = 77 → 'M'</div>
+						</div>
+						<div class="bracket-group" style="width:calc(8*27px + 6px);">
+							<div class="bracket-bar" style="width:88%; border-color:var(--byte1);"></div>
+							<div class="bracket-text" style="color:var(--byte1);">n>>8 = 97 → 'a'</div>
+						</div>
+						<div class="bracket-group" style="width:calc(8*27px + 6px);">
+							<div class="bracket-bar" style="width:88%; border-color:var(--byte2);"></div>
+							<div class="bracket-text" style="color:var(--byte2);">n = 110 → 'n'</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					The <code>(uint8_t)</code> cast implicitly keeps only the lowest 8 bits — same as <code>&amp;
+					0xFF</code> but the compiler does it for you.
+				</div>
+			</div>
+
+			<div class="callout">
+				"TWFu" → bytes 77, 97, 110 → "Man". Full circle.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Decode tail handling</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Trailing chars</th>
+						<th>Bits available</th>
+						<th>Bytes produced</th>
+						<th>Rationale</th>
+					</tr>
+					<tr>
+						<td>0</td>
+						<td>0</td>
+						<td>0</td>
+						<td>Clean boundary, nothing left.</td>
+					</tr>
+					<tr>
+						<td>1</td>
+						<td>6</td>
+						<td style="color:var(--byte0); font-weight:600;">INVALID</td>
+						<td>6 bits &lt; 8 bits. Can't produce a whole byte. This can't have come from a valid encode.
+						</td>
+					</tr>
+					<tr>
+						<td>2</td>
+						<td>12</td>
+						<td>1</td>
+						<td>12 ≥ 8. Top 8 bits are real, bottom 4 are trailing zeros from encode.</td>
+					</tr>
+					<tr>
+						<td>3</td>
+						<td>18</td>
+						<td>2</td>
+						<td>18 ≥ 16. Top 16 bits are real, bottom 2 are trailing zeros.</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: IMPLEMENTATION                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-impl">
+
+		<div class="section">
+			<h2>Two-phase loop structure</h2>
+
+			<p>Both encode and decode process in two phases: first the "full" groups (triples for encode, quads for
+				decode) in a tight loop, then handle the remainder separately. This avoids any branching inside the hot
+				path.</p>
+
+			<div class="codeblock"><span class="cm">// Phase 1: full groups (no branching inside)</span>
+				<span class="kw">for</span> (size_t i = <span class="num">0</span>; i < full_triples; i++) {
+				<span class="cm">// pack → extract → store (always 3 in, 4 out)</span>
+				}
+
+				<span class="cm">// Phase 2: handle 0, 1, or 2 remaining bytes</span>
+				<span class="kw">if</span> (remainder == <span class="num">1</span>) { <span
+					class="cm">/* 1 byte → 2 chars */</span>
+				}
+				<span class="kw">else if</span> (remainder == <span class="num">2</span>) { <span class="cm">/* 2 bytes → 3 chars */</span>
+				}
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The DEC_TABLE ambiguity problem</h2>
+
+			<p>The decode table is a 256-entry array where <code>DEC_TABLE['B']</code> returns <code>1</code>, <code>DEC_TABLE['z']</code>
+				returns <code>51</code>, and so on. The problem: <code>DEC_TABLE['A']</code> returns <code>0</code>, but
+				so does <code>DEC_TABLE['!']</code> or <code>DEC_TABLE['@']</code> — because all uninitialized entries
+				are zero by default in C.</p>
+
+			<p>You cannot distinguish "this is the letter A, which legitimately maps to 0" from "this is an invalid
+				character that happens to be 0." So the code validates all characters <strong>before</strong> decoding,
+				using a simple range-check function:</p>
+
+			<div class="codeblock"><span class="kw">static int</span> is_valid_b64char(<span
+				class="kw">const char</span> c) {
+				<span class="kw">if</span> (c >= <span class="str">'A'</span> && c <= <span class="str">'Z'</span>)
+				<span class="kw">return</span> <span class="num">1</span>;
+				<span class="kw">if</span> (c >= <span class="str">'a'</span> && c <= <span class="str">'z'</span>)
+				<span class="kw">return</span> <span class="num">1</span>;
+				<span class="kw">if</span> (c >= <span class="str">'0'</span> && c <= <span class="str">'9'</span>)
+				<span class="kw">return</span> <span class="num">1</span>;
+				<span class="kw">if</span> (c == <span class="str">'-'</span> || c == <span class="str">'_'</span>)
+				<span class="kw">return</span> <span class="num">1</span>;
+				<span class="kw">return</span> <span class="num">0</span>;
+				}
+			</div>
+
+			<div class="callout">
+				An alternative approach used by some libraries: fill invalid entries with a sentinel like
+				<code>0xFF</code> (255) instead of leaving them at 0. Then the table itself can detect invalid
+				characters and you don't need a separate validation pass. Our implementation chose the explicit
+				validation approach — simpler to read, same result.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The (unsigned char) cast on decode</h2>
+
+			<p>In C, <code>char</code> may be signed (typically −128 to 127) on some platforms. If you index an array
+				with a negative value, you're reading outside the array bounds — undefined behavior. The cast <code>(unsigned
+					char) in[si]</code> ensures the index is always 0–255:</p>
+
+			<div class="codeblock">DEC_TABLE[(<span class="kw">unsigned char</span>) in[si]] <span class="cm">// always 0–255, safe</span>
+				DEC_TABLE[in[si]] <span class="cm">// could be negative if char is signed!</span></div>
+		</div>
+
+		<div class="section">
+			<h2>The (uint32_t) cast on encode</h2>
+
+			<p><code>in[si]</code> is a <code>uint8_t</code> — an 8-bit value. When you write <code>in[si] &lt;&lt;
+				16</code>, C promotes it to <code>int</code> (typically 32-bit signed). For values ≤ 127 this works
+				fine, but for larger byte values the result might not be what you expect with signed arithmetic. The
+				explicit <code>(uint32_t)</code> cast makes the promotion to unsigned 32-bit explicit and safe for all
+				byte values 0–255.</p>
+		</div>
+
+		<div class="section">
+			<h2>Length formulas cheat sheet</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Direction</th>
+						<th>Formula</th>
+						<th>C expression</th>
+						<th>Note</th>
+					</tr>
+					<tr>
+						<td>Encode output</td>
+						<td>⌈n × 4 / 3⌉</td>
+						<td><code>(n * 4 + 2) / 3</code></td>
+						<td>Exact length (no padding)</td>
+					</tr>
+					<tr>
+						<td>Encode buffer</td>
+						<td>⌈n × 4 / 3⌉ + 1</td>
+						<td><code>(n * 4 + 2) / 3 + 1</code></td>
+						<td>+1 for NUL terminator</td>
+					</tr>
+					<tr>
+						<td>Decode output</td>
+						<td>⌊n × 3 / 4⌋</td>
+						<td><code>(n * 3) / 4</code></td>
+						<td>Maximum bytes; actual may be 1–2 less</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Complete encode/decode at a glance</h2>
+
+			<div class="diagram" style="padding: 20px 24px;">
+				<div style="font-family:var(--mono); font-size:12px; line-height: 2.2;">
+					<div
+						style="color:var(--text-dim); margin-bottom: 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">
+						Encode pipeline
+					</div>
+					<span style="color:var(--byte0);">bytes</span>
+					<span style="color:var(--text-xdim); margin: 0 8px;">→ group by 3 →</span>
+					<span style="color:var(--text-dim);">(b0&lt;&lt;16)|(b1&lt;&lt;8)|b2</span>
+					<span style="color:var(--text-xdim); margin: 0 8px;">→</span>
+					<span style="color:var(--accent2);">24-bit int</span>
+					<span style="color:var(--text-xdim); margin: 0 8px;">→ shift &amp; mask →</span>
+					<span style="color:var(--c1);">4 × 6-bit index</span>
+					<span style="color:var(--text-xdim); margin: 0 8px;">→ ENC_TABLE[] →</span>
+					<span style="color:var(--text-b);">4 chars</span>
+
+					<div
+						style="color:var(--text-dim); margin: 16px 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">
+						Decode pipeline
+					</div>
+					<span style="color:var(--text-b);">chars</span>
+					<span style="color:var(--text-xdim); margin: 0 8px;">→ group by 4 → DEC_TABLE[] →</span>
+					<span style="color:var(--c1);">4 × 6-bit values</span>
+					<span style="color:var(--text-xdim); margin: 0 8px;">→</span>
+					<span style="color:var(--text-dim);">(v0&lt;&lt;18)|(v1&lt;&lt;12)|(v2&lt;&lt;6)|v3</span>
+					<span style="color:var(--text-xdim); margin: 0 8px;">→</span>
+					<span style="color:var(--accent2);">24-bit int</span>
+					<span style="color:var(--text-xdim); margin: 0 8px;">→ shift →</span>
+					<span style="color:var(--byte0);">3 bytes</span>
+				</div>
+			</div>
+		</div>
+
+	</div>
 
 </div>
 
 <script>
-    // Alphabet grid
-    const enc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    const grid = document.getElementById('alpha-grid');
-    for (let i = 0; i < 64; i++) {
-        const cell = document.createElement('div');
-        cell.className = 'alpha-cell';
-        cell.innerHTML = `<div class="ac-char">${enc[i]}</div><div class="ac-idx">${i}</div>`;
-        grid.appendChild(cell);
-    }
+	// Alphabet grid
+	const enc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+	const grid = document.getElementById('alpha-grid');
+	for (let i = 0; i < 64; i++) {
+		const cell = document.createElement('div');
+		cell.className = 'alpha-cell';
+		cell.innerHTML = `<div class="ac-char">${enc[i]}</div><div class="ac-idx">${i}</div>`;
+		grid.appendChild(cell);
+	}
 
-    // Tab switching
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-        });
-    });
+	// Tab switching
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
 </script>
 </body>
 </html>
