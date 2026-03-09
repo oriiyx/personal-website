@@ -22,12 +22,13 @@ const commandDescriptions: Record<string, string> = {
 	weather: 'Shows weather info',
 	banner: 'Terminal banner',
 	exit: 'Displays how to exit',
-	blog: 'Open blog'
+	blog: 'Open blog',
+	cv: 'Open my curriculum vitae'
 };
 
 const categories: [string, string[]][] = [
 	['General', ['help', 'banner', 'clear', 'exit', 'whoami', 'hostname', 'date']],
-	['Navigation', ['github', 'repo', 'blog', 'email', 'linkedin']],
+	['Navigation', ['github', 'repo', 'blog', 'email', 'linkedin', 'cv']],
 	['Information', ['aboutme', 'weather', 'echo']],
 	['Projects', ['booktime', 'fritz']],
 	['Customization', ['theme', 'sudo']]
@@ -193,5 +194,9 @@ complex web applications and a bit of mobile development.
 
 I'm always looking for new challenges and opportunities to improve my skills.
 Feel free to reach out via LinkedIn or GitHub if you'd like to connect!
-`
+`,
+	cv: () => {
+		openUrl('/cv/');
+		return 'Opening CV...';
+	}
 };
