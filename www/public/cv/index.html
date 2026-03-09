@@ -89,16 +89,82 @@
           margin: 2em 0;
       }
 
+      /* ── Screen-only nav bar ── */
+      .nav-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 2em;
+      }
+
       .back-link {
           font-size: 0.9em;
-          margin-bottom: 2em;
-          display: block;
+      }
+
+      .print-btn {
+          font-family: Georgia, "Times New Roman", serif;
+          font-size: 0.85em;
+          color: #111;
+          background: #fff;
+          border: 1px solid #aaa;
+          border-radius: 4px;
+          padding: 5px 14px;
+          cursor: pointer;
+          transition: background 0.15s, border-color 0.15s;
+      }
+
+      .print-btn:hover {
+          background: #f4f4f4;
+          border-color: #666;
+      }
+
+      /* ── Print styles ── */
+      @media print {
+          /* Hide everything that isn't content */
+          .nav-bar {
+              display: none;
+          }
+
+          /* Reset margins so the content fills the page properly */
+          body {
+              margin: 0;
+              padding: 0;
+              max-width: 100%;
+              font-size: 13px;
+          }
+
+          /* Ensure links print with visible URLs where useful */
+          a {
+              color: #111;
+              text-decoration: none;
+          }
+
+          /* Avoid breaking entries across pages */
+          .exp-entry {
+              break-inside: avoid;
+          }
+
+          h2 {
+              break-after: avoid;
+          }
+
+          ul {
+              break-inside: avoid;
+          }
+
+          /* Don't print the footer timestamp with a page break before it */
+          hr + p {
+              break-before: avoid;
+          }
       }
 	</style>
 </head>
 <body>
 
-<a class="back-link" href="/">← Back to terminal</a>
+<div class="nav-bar">
+	<a class="back-link" href="/">← Back to terminal</a>
+	<button class="print-btn" onclick="window.print()">Download as PDF</button>
+</div>
 
 <h1>Peter Paravinja</h1>
 <div class="contact">
