@@ -127,6 +127,21 @@
 			– entire end-to-end development
 		</li>
 		<li><strong>EU IOSS RTU</strong> – development, infrastructure planning and deployment planning</li>
+		<li>
+			<strong>cvc</strong> (<a href="https://github.com/MyNextID/cvc" target="_blank">github.com/MyNextID/cvc</a>) –
+			C library for cryptographic operations used to transfer verifiable credentials between Velocert (issuer) and the
+			web wallet.
+			Built on MIRACL Core for elliptic curve cryptography and l8w8jwt for JWT/JOSE operations,
+			with a complex CMake build system managing multiple git-submodule dependencies and a fully automated
+			GitHub Actions release pipeline producing cross-platform static libraries for macOS, Linux and Windows.
+		</li>
+		<li>
+			<strong>cvc-go</strong> (<a href="https://github.com/MyNextID/cvc-go"
+																	target="_blank">github.com/MyNextID/cvc-go</a>) –
+			Go SDK wrapping the CVC C library via CGO, exposing issuer and wallet cryptographic operations
+			(JWT/JOSE, Ed25519 / NIST P-256 signatures, key generation and derivation) as an idiomatic Go package
+			installable with a single <code>go get</code>.
+		</li>
 		<li>Internal Ansible scripting to automate and improve deployment pipelines</li>
 	</ul>
 	<div style="font-size:0.9em;color:#555;margin-top:0.3em;">Go, PostgreSQL, Ansible, Docker</div>
