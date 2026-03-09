@@ -7,7 +7,7 @@ const commandDescriptions: Record<string, string> = {
 	help: 'Display available commands',
 	aboutme: 'Display about me info',
 	booktime: 'Display booktime info',
-	bde: 'Display bde info',
+	fritz: 'Display fritz info',
 	linkedin: 'Display linkedin info',
 	hostname: 'Show current hostname',
 	whoami: 'Show current user',
@@ -29,7 +29,7 @@ const categories: [string, string[]][] = [
 	['General', ['help', 'banner', 'clear', 'exit', 'whoami', 'hostname', 'date']],
 	['Navigation', ['github', 'repo', 'blog', 'email', 'linkedin']],
 	['Information', ['aboutme', 'weather', 'echo']],
-	['Projects', ['booktime', 'bde']],
+	['Projects', ['booktime', 'fritz']],
 	['Customization', ['theme', 'sudo']]
 ];
 
@@ -74,9 +74,9 @@ export const commands: Record<string, (args: string[]) => Promise<string> | stri
 		return 'Checkout my blog over at <a href="https://dev.to/oriiyx" target="_blank">https://dev.to/oriiyx</a> for more personal thoughts!';
 	},
 
-	bde: () => {
-		openUrl('https://github.com/oriiyx/bde');
-		return 'BDE stands for Boring Database Engine - it takes SQLc ideology (which I love) and tries to implement it in PHP world.';
+	fritz: () => {
+		openUrl('https://github.com/oriiyx/fritz');
+		return 'Fritz is a proof-of-concept dynamic CMS system (inspired by Pimcore) built in Golang — demonstrating how to achieve runtime flexibility in a statically typed language. Check it out at <a href="https://github.com/oriiyx/fritz" target="_blank">https://github.com/oriiyx/fritz</a>!';
 	},
 
 	linkedin: () => {
@@ -161,7 +161,7 @@ export const commands: Record<string, (args: string[]) => Promise<string> | stri
 ██║     ███████╗   ██║   ███████╗██║  ██║    ██║██╗
 ╚═╝     ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝    ╚═╝╚═╝  v${version}
 
-Peter Paravinja | Full-Stack Developer | Golang | TypeScript | PHP | Rust | Python
+Peter Paravinja | Full-Stack Developer | Golang | TypeScript | PHP | Python
 Working on web applications, mobile applications and open-source tools.
 Type 'help' to see list of available commands.
 `;
@@ -172,12 +172,11 @@ Type 'help' to see list of available commands.
 complex web applications and a bit of mobile development.
 
 <span style='font-weight: bold;'>CURRENT WORK</span>:
-- Working at Netis on cryptographic applications, passkey technology while tackling infrastructure problems
-- Developing SQLC port for PHP and MySQL (rewritten in Rust)
-- Creating interactive CLI-based tools and applications
+- Working at Netis on solving the EU's IOSS compliance problem and scaling the solution
+- Building a hobby game in Unity in my spare time
 
 <span style='font-weight: bold;'>SKILLS</span>:
-- Languages: Golang, JavaScript/TypeScript, Rust, PHP, Python
+- Languages: Golang, JavaScript/TypeScript, PHP, Python
 - Full development cycle: from design to deployment and marketing
 - Solo developed Booktime.co, a book reading tracking app with book club functionality
 
@@ -185,7 +184,7 @@ complex web applications and a bit of mobile development.
 - Booktime.co: A social book-tracking platform with book club features
   (React Native, Remix, Golang, infrastructure, design, marketing)
 - Use 'booktime' command for more info!
-- Use 'bde' command for more info!
+- Use 'fritz' command for more info!
 
 <span style='font-weight: bold;'>CONNECT</span>:
 - Blog: <a href="https://oriiyx.dev/" target="_blank">https://dev.to/oriiyx/</a>
