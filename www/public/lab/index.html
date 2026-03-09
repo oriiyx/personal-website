@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Lab — Peter Paravinja</title>
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --mono: 'JetBrains Mono', 'Cascadia Code', monospace;
+          --green: #84c138;
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+      }
+
+      * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+      }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--mono);
+          font-size: 14px;
+          line-height: 1.6;
+          min-height: 100vh;
+      }
+
+      /* Subtle grid texture */
+      body::before {
+          content: '';
+          position: fixed;
+          inset: 0;
+          background-image: linear-gradient(rgba(132, 193, 56, 0.015) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(132, 193, 56, 0.015) 1px, transparent 1px);
+          background-size: 40px 40px;
+          pointer-events: none;
+          z-index: 0;
+      }
+
+      .page {
+          max-width: 860px;
+          margin: 0 auto;
+          padding: 48px 24px 100px;
+          position: relative;
+          z-index: 1;
+      }
+
+      /* Header */
+      .header {
+          margin-bottom: 56px;
+      }
+
+      .back-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          color: var(--text-dim);
+          text-decoration: none;
+          margin-bottom: 32px;
+          letter-spacing: 0.3px;
+          transition: color 0.15s;
+      }
+
+      .back-link:hover {
+          color: var(--green);
+      }
+
+      .header-top {
+          display: flex;
+          align-items: baseline;
+          gap: 14px;
+          margin-bottom: 10px;
+      }
+
+      .prompt {
+          font-size: 16px;
+          font-weight: 700;
+      }
+
+      .prompt .user {
+          color: var(--green);
+      }
+
+      .prompt .sep {
+          color: var(--text-dim);
+      }
+
+      .prompt .dir {
+          color: var(--accent2);
+      }
+
+      .prompt .dollar {
+          color: var(--text-dim);
+      }
+
+      h1 {
+          font-size: 28px;
+          font-weight: 800;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          line-height: 1.1;
+      }
+
+      .header-desc {
+          margin-top: 14px;
+          font-size: 13px;
+          color: var(--text-dim);
+          max-width: 520px;
+          line-height: 1.7;
+      }
+
+      .header-desc em {
+          color: var(--text);
+          font-style: normal;
+      }
+
+      /* Stats row */
+      .stats {
+          display: flex;
+          gap: 24px;
+          margin-top: 24px;
+          padding-top: 20px;
+          border-top: 1px solid var(--border);
+      }
+
+      .stat {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+      }
+
+      .stat-val {
+          font-size: 20px;
+          font-weight: 700;
+          color: var(--green);
+      }
+
+      .stat-lbl {
+          font-size: 10px;
+          color: var(--text-dim);
+          text-transform: uppercase;
+          letter-spacing: 1px;
+      }
+
+      /* Grid */
+      .grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+          gap: 16px;
+      }
+
+      /* Card */
+      .card {
+          display: block;
+          text-decoration: none;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+          position: relative;
+          overflow: hidden;
+      }
+
+      .card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 2px;
+          background: linear-gradient(90deg, var(--accent), var(--green));
+          opacity: 0;
+          transition: opacity 0.2s;
+      }
+
+      .card:hover {
+          border-color: var(--border-hi);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      }
+
+      .card:hover::before {
+          opacity: 1;
+      }
+
+      .card-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 9px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.2px;
+          color: var(--accent2);
+          background: rgba(124, 92, 224, 0.08);
+          border: 1px solid rgba(124, 92, 224, 0.18);
+          border-radius: 4px;
+          padding: 3px 8px;
+          margin-bottom: 14px;
+      }
+
+      .card-title {
+          font-size: 17px;
+          font-weight: 700;
+          color: var(--text-b);
+          margin-bottom: 8px;
+          letter-spacing: -0.3px;
+      }
+
+      .card-desc {
+          font-size: 12px;
+          color: var(--text-dim);
+          line-height: 1.65;
+          margin-bottom: 20px;
+      }
+
+      .card-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+      }
+
+      .card-topics {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+      }
+
+      .topic {
+          font-size: 9px;
+          color: var(--text-dim);
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          border-radius: 3px;
+          padding: 2px 7px;
+      }
+
+      .card-arrow {
+          font-size: 16px;
+          color: var(--border-hi);
+          transition: color 0.2s, transform 0.2s;
+      }
+
+      .card:hover .card-arrow {
+          color: var(--green);
+          transform: translateX(3px);
+      }
+
+      /* Empty state */
+      .empty {
+          text-align: center;
+          padding: 60px 20px;
+          color: var(--text-dim);
+          font-size: 13px;
+      }
+
+      .empty-icon {
+          font-size: 32px;
+          margin-bottom: 12px;
+          opacity: 0.4;
+      }
+
+      /* Footer */
+      .footer {
+          margin-top: 64px;
+          padding-top: 24px;
+          border-top: 1px solid var(--border);
+          font-size: 11px;
+          color: var(--text-dim);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+      }
+
+      .footer a {
+          color: var(--text-dim);
+          text-decoration: none;
+          transition: color 0.15s;
+      }
+
+      .footer a:hover {
+          color: var(--green);
+      }
+
+      @media (max-width: 600px) {
+          .grid {
+              grid-template-columns: 1fr;
+          }
+
+          h1 {
+              font-size: 22px;
+          }
+
+          .stats {
+              gap: 16px;
+          }
+      }
+
+      /* Staggered card entrance */
+      .card {
+          animation: cardIn 0.3s ease both;
+      }
+
+      .card:nth-child(1) {
+          animation-delay: 0.05s;
+      }
+
+      .card:nth-child(2) {
+          animation-delay: 0.10s;
+      }
+
+      .card:nth-child(3) {
+          animation-delay: 0.15s;
+      }
+
+      .card:nth-child(4) {
+          animation-delay: 0.20s;
+      }
+
+      .card:nth-child(5) {
+          animation-delay: 0.25s;
+      }
+
+      .card:nth-child(6) {
+          animation-delay: 0.30s;
+      }
+
+      @keyframes cardIn {
+          from {
+              opacity: 0;
+              transform: translateY(12px);
+          }
+          to {
+              opacity: 1;
+              transform: translateY(0);
+          }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<div class="header">
+		<a class="back-link" href="/">← back to terminal</a>
+
+		<div class="header-top">
+			<div class="prompt">
+				<span class="user">guest</span><span class="sep">@</span><span class="dir">lab</span><span
+				class="dollar">:~$</span>
+			</div>
+		</div>
+
+		<h1>The Lab</h1>
+
+		<p class="header-desc">
+			Visual deep-dives into technical concepts.
+			I'm a <em>visual learner</em> — these are the documents I build to
+			understand how things actually work, from first principles.
+		</p>
+
+		<div class="stats">
+			<div class="stat">
+				<span class="stat-val" id="count">0</span>
+				<span class="stat-lbl">Visualizers</span>
+			</div>
+			<div class="stat">
+				<span class="stat-val">↗</span>
+				<span class="stat-lbl">Interactive</span>
+			</div>
+		</div>
+	</div>
+
+	<div class="grid" id="grid"></div>
+
+	<div class="footer">
+		<span>peter paravinja · lab</span>
+		<a href="/">← terminal</a>
+	</div>
+
+</div>
+
+<script>
+	// ─── Add new visualizers here ───────────────────────────────────────────
+	const visualizers = [
+		{
+			slug: 'base64url',
+			title: 'base64url',
+			subtitle: 'RFC 4648 §5',
+			description: 'From first principles: why base64 exists, the url-safe alphabet, how 3 bytes map to 4 characters, remainder handling, and a full encode/decode walkthrough.',
+			topics: ['encoding', 'binary', 'rfc 4648', 'jwt']
+		}
+		// Add more here:
+		// {
+		//   slug: 'jwt',
+		//   title: 'JSON Web Tokens',
+		//   subtitle: 'RFC 7519',
+		//   description: '...',
+		//   topics: ['auth', 'signing', 'claims'],
+		// },
+	];
+	// ────────────────────────────────────────────────────────────────────────
+
+	const grid = document.getElementById('grid');
+	const countEl = document.getElementById('count');
+
+	countEl.textContent = visualizers.length;
+
+	if (visualizers.length === 0) {
+		grid.innerHTML = `
+			<div class="empty" style="grid-column:1/-1">
+				<div class="empty-icon">⚗️</div>
+				<div>No visualizers yet. More coming soon.</div>
+			</div>`;
+	} else {
+		visualizers.forEach(v => {
+			const a = document.createElement('a');
+			a.className = 'card';
+			a.href = `/lab/${v.slug}/`;
+			a.innerHTML = `
+				<div class="card-tag">✦ visualizer</div>
+				<div class="card-title">${v.title}</div>
+				<div class="card-desc">${v.description}</div>
+				<div class="card-footer">
+					<div class="card-topics">
+						${v.topics.map(t => `<span class="topic">${t}</span>`).join('')}
+					</div>
+					<span class="card-arrow">→</span>
+				</div>
+			`;
+			grid.appendChild(a);
+		});
+	}
+</script>
+</body>
+</html>

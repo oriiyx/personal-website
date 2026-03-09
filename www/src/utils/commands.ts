@@ -23,12 +23,13 @@ const commandDescriptions: Record<string, string> = {
 	banner: 'Terminal banner',
 	exit: 'Displays how to exit',
 	blog: 'Open blog',
-	cv: 'Open my curriculum vitae'
+	cv: 'Open my curriculum vitae',
+	lab: 'Open the lab — visual deep-dives into technical concepts'
 };
 
 const categories: [string, string[]][] = [
 	['General', ['help', 'banner', 'clear', 'exit', 'whoami', 'hostname', 'date']],
-	['Navigation', ['github', 'repo', 'blog', 'email', 'linkedin', 'cv']],
+	['Navigation', ['github', 'repo', 'blog', 'email', 'linkedin', 'cv', 'lab']],
 	['Information', ['aboutme', 'weather', 'echo']],
 	['Projects', ['booktime', 'fritz']],
 	['Customization', ['theme', 'sudo']]
@@ -198,5 +199,10 @@ Feel free to reach out via LinkedIn or GitHub if you'd like to connect!
 	cv: () => {
 		openUrl('/cv/');
 		return 'Opening CV...';
+	},
+
+	lab: () => {
+		openUrl('/lab/');
+		return 'Opening <a href="/lab/" target="_blank">the lab</a> — visual deep-dives into technical concepts.';
 	}
 };
