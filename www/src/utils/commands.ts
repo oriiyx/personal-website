@@ -39,6 +39,10 @@ function openUrl(url: string): void {
 	window.open(url);
 }
 
+function navigateTo(path: string): void {
+	window.location.href = path;
+}
+
 export const commands: Record<string, (args: string[]) => Promise<string> | string> = {
 	help: () => {
 		let result = 'Available commands:\n\n';
@@ -197,12 +201,12 @@ I'm always looking for new challenges and opportunities to improve my skills.
 Feel free to reach out via LinkedIn or GitHub if you'd like to connect!
 `,
 	cv: () => {
-		openUrl('/cv/');
+		navigateTo('/cv/');
 		return 'Opening CV...';
 	},
 
 	lab: () => {
-		openUrl('/lab/');
-		return 'Opening <a href="/lab/" target="_blank">the lab</a> — visual deep-dives into technical concepts.';
+		navigateTo('/lab/');
+		return 'Opening the lab...';
 	}
 };
