@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Finite State Machines — From First Principles</title>
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+				rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+
+          /* State colors — consistent across ALL diagrams */
+          --s-idle: #e8b834;
+          --s-patrol: #4dc462;
+          --s-chase: #e8883a;
+          --s-attack: #f06565;
+          --s-dead: #5c6380;
+
+          /* Structural colors */
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --guard: #3d9be8;
+          --action: #4dc462;
+          --warn: #e8883a;
+          --trans: #e599f7;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      .page {
+          max-width: 820px;
+          margin: 0 auto;
+          padding: 48px 24px 100px;
+      }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      /* ── Tabs ── */
+      .tab-bar {
+          display: flex;
+          gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+      }
+
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+
+      .tab-btn:hover { color: var(--text); background: var(--surface2); }
+      .tab-btn.active { color: #fff; background: var(--accent); }
+
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; animation: fadeIn 0.2s ease; }
+
+      @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* ── Prose ── */
+      .section { margin-bottom: 40px; }
+
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .section p { margin-bottom: 14px; }
+      .section p:last-child { margin-bottom: 0; }
+
+      strong { color: var(--text-b); font-weight: 600; }
+
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      /* ── Diagrams ── */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* ── Tables ── */
+      .tbl-wrap { overflow-x: auto; margin: 16px 0; }
+
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+      }
+
+      tr:last-child td { border-bottom: none; }
+
+      /* ── Code block ── */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+          white-space: pre;
+      }
+
+      .codeblock .kw { color: var(--accent2); }
+      .codeblock .cm { color: var(--text-dim); font-style: italic; }
+      .codeblock .num { color: var(--s-idle); }
+      .codeblock .str { color: var(--action); }
+      .codeblock .tp { color: var(--guard); }
+      .codeblock .fn { color: var(--warn); }
+
+      /* ── Callout ── */
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+
+      .callout.good {
+          background: rgba(77, 196, 98, 0.06);
+          border-color: rgba(77, 196, 98, 0.14);
+      }
+
+      /* ── State cards ── */
+      .state-cards {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin: 16px 0;
+      }
+
+      .scard {
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 10px 16px;
+          text-align: center;
+          flex: 1;
+          min-width: 90px;
+      }
+
+      .scard .sc-name {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+      }
+
+      .scard .sc-sub {
+          font-family: var(--mono);
+          font-size: 9px;
+          color: var(--text-dim);
+          margin-top: 2px;
+      }
+
+      /* ── Flow / pipeline ── */
+      .flow-pipe {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-family: var(--mono);
+          font-size: 12px;
+          flex-wrap: wrap;
+          justify-content: center;
+          padding: 12px 0;
+      }
+
+      .flow-pipe .fp-box {
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 8px 14px;
+          text-align: center;
+      }
+
+      .flow-pipe .fp-arrow {
+          color: var(--text-xdim);
+          font-size: 16px;
+      }
+
+      /* ── Inline colored labels ── */
+      .si { color: var(--s-idle); }
+      .sp { color: var(--s-patrol); }
+      .sc { color: var(--s-chase); }
+      .sa { color: var(--s-attack); }
+      .sd { color: var(--s-dead); }
+      .sg { color: var(--guard); }
+      .sact { color: var(--action); }
+      .cp { color: var(--accent2); }
+
+      /* ── Comparison blocks ── */
+      .compare {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin: 16px 0;
+      }
+
+      .compare-box {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 16px;
+      }
+
+      .compare-box .cb-title {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 10px;
+      }
+
+      .compare-box .cb-title.bad { color: var(--s-attack); }
+      .compare-box .cb-title.good { color: var(--action); }
+
+      .compare-box pre {
+          font-family: var(--mono);
+          font-size: 11px;
+          line-height: 1.6;
+          color: var(--text);
+          white-space: pre;
+          overflow-x: auto;
+      }
+
+      /* ── Transition arrows ── */
+      .trans-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin: 8px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+      }
+
+      .trans-from, .trans-to {
+          padding: 6px 14px;
+          border-radius: 6px;
+          font-weight: 600;
+          font-size: 12px;
+          border: 1px solid;
+          min-width: 80px;
+          text-align: center;
+          flex-shrink: 0;
+      }
+
+      .trans-arrow {
+          color: var(--text-xdim);
+          font-size: 14px;
+          flex-shrink: 0;
+      }
+
+      .trans-label {
+          font-size: 10px;
+          color: var(--text-dim);
+          flex: 1;
+          min-width: 0;
+      }
+
+      /* ── Lifecycle diagram ── */
+      .lifecycle {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+      }
+
+      .lc-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+      }
+
+      .lc-phase {
+          width: 120px;
+          text-align: right;
+          flex-shrink: 0;
+          font-weight: 600;
+          font-size: 11px;
+      }
+
+      .lc-bar {
+          height: 32px;
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          padding: 0 12px;
+          font-size: 11px;
+          font-weight: 500;
+          flex: 1;
+      }
+
+      .lc-desc {
+          color: var(--text-dim);
+          font-family: var(--mono);
+          font-size: 10px;
+          padding-left: 134px;
+          margin-top: -2px;
+          margin-bottom: 8px;
+      }
+
+      /* ── Pattern cards ── */
+      .pattern-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 10px;
+          margin: 16px 0;
+      }
+
+      .pat-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 16px;
+      }
+
+      .pat-card .pc-title {
+          font-family: var(--mono);
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--text-b);
+          margin-bottom: 8px;
+      }
+
+      .pat-card .pc-when {
+          font-family: var(--mono);
+          font-size: 10px;
+          color: var(--text-dim);
+          line-height: 1.6;
+      }
+
+      .pat-card .pc-tag {
+          display: inline-block;
+          font-family: var(--mono);
+          font-size: 9px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+          padding: 3px 8px;
+          border-radius: 4px;
+          margin-top: 10px;
+      }
+
+      .scroll-hint { min-width: 580px; }
+
+      @media (max-width: 700px) {
+          .compare { grid-template-columns: 1fr; }
+          .pattern-grid { grid-template-columns: 1fr; }
+          .tab-btn { font-size: 10px; padding: 7px 10px; }
+          .lc-phase { width: 80px; font-size: 10px; }
+          .lc-desc { padding-left: 94px; }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<div class="page-header">
+		<h1>finite state machines for Unity</h1>
+		<div class="sub">from theory to MonoBehaviour · enemy AI · player control · game managers · C#</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="problem">The Problem</button>
+		<button class="tab-btn" data-tab="anatomy">Anatomy</button>
+		<button class="tab-btn" data-tab="example">Worked Example</button>
+		<button class="tab-btn" data-tab="patterns">Patterns</button>
+		<button class="tab-btn" data-tab="unity">Unity Integration</button>
+		<button class="tab-btn" data-tab="impl">Implementation</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE PROBLEM                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-problem">
+
+		<div class="section">
+			<h2>Why does every game need state machines?</h2>
+
+			<p>Every entity in a game — enemies, the player, the UI, the game session itself — has <strong>modes of behavior</strong> that change over time. An enemy patrols until it sees you, then chases, then attacks. A player is idle until they press jump, then they're airborne, then landing. A game is on a menu screen, then playing, then paused.</p>
+
+			<p>The naive approach is to track each behavior with booleans and branch on them every frame:</p>
+
+			<div class="compare">
+				<div class="compare-box">
+					<div class="cb-title bad">The boolean swamp</div>
+					<pre>bool isPatrolling;
+bool isChasing;
+bool isAttacking;
+bool isDead;
+bool isStunned;
+
+void Update() {
+  if (isDead) return;
+  if (isStunned && !isDead) { ... }
+  if (isAttacking && !isStunned) { ... }
+  if (isChasing && !isAttacking
+      && !isStunned) { ... }
+  if (isPatrolling && !isChasing
+      && !isAttacking) { ... }
+}</pre>
+				</div>
+				<div class="compare-box">
+					<div class="cb-title good">The FSM version</div>
+					<pre>enum State {
+  Idle, Patrol, Chase,
+  Attack, Dead
+}
+
+State current = State.Idle;
+
+void Update() {
+  switch (current) {
+    case State.Patrol:  DoPatrol();  break;
+    case State.Chase:   DoChase();   break;
+    case State.Attack:  DoAttack();  break;
+    case State.Dead:    break;
+  }
+}</pre>
+				</div>
+			</div>
+
+			<p>The boolean version has <strong>2<sup>5</sup> = 32 possible flag combinations</strong>, most of which are invalid (you can't be patrolling AND dead). You have to defensively negate every other flag in every branch. Add one more boolean and every existing branch needs another <code>&amp;&amp; !newFlag</code> check.</p>
+
+			<p>The FSM version has <strong>exactly 5 possible states</strong>, all of them valid by construction. The entity is in exactly one state at any given time. Adding a new state means adding one enum value and one case — existing states don't change at all.</p>
+		</div>
+
+		<div class="section">
+			<h2>The three things that break without an FSM</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">Failure mode 1 — Illegal state combinations</div>
+				<div class="diagram-caption">
+					With booleans, nothing prevents <code>isAttacking = true</code> and <code>isDead = true</code> simultaneously.
+					You get a dead enemy that's still swinging its sword. An FSM makes this <strong>structurally impossible</strong> — the entity is in <code>Attack</code> OR <code>Dead</code>, never both.
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Failure mode 2 — Missing enter/exit logic</div>
+				<div class="diagram-caption">
+					When an enemy starts chasing, you need to play a "spotted" bark, set the nav agent speed, start a chase animation. When it stops chasing, you need to reset speed and clear the target. With if/else, this enter/exit logic has nowhere clean to live — it fires every frame or you add <code>wasChasing</code> flags. An FSM gives you explicit <strong>OnEnter</strong> and <strong>OnExit</strong> hooks per state.
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Failure mode 3 — Uncontrolled transitions</div>
+				<div class="diagram-caption">
+					An enemy in mid-attack shouldn't be able to suddenly start patrolling because the player walked away. With booleans, any code anywhere can flip any flag. An FSM makes transitions <strong>explicit and guarded</strong> — you define exactly which states can transition to which others, and under what conditions.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The tradeoff</h2>
+
+			<p>An FSM adds a small amount of structure upfront — defining states, transitions, enter/exit hooks — in exchange for <strong>predictable behavior at any scale</strong>. For a solo developer, this matters enormously: you can come back to an enemy's behavior six months later and immediately read its state diagram to understand what it does. The boolean swamp is write-only code.</p>
+
+			<div class="callout">
+				<strong>The rule of thumb:</strong> if an entity has 3+ distinct behaviors that shouldn't overlap, use an FSM. Two behaviors (alive/dead, on/off) can be a simple boolean. Three or more — you want a state machine.
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: ANATOMY                                    -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-anatomy">
+
+		<div class="section">
+			<h2>The five formal components</h2>
+
+			<p>A finite state machine is formally a 5-tuple <code>(S, s₀, Σ, δ, F)</code>. In game development terms:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Formal</th>
+						<th>Game term</th>
+						<th>What it is</th>
+						<th>Example</th>
+					</tr>
+					<tr>
+						<td><code>S</code></td>
+						<td><strong>States</strong></td>
+						<td>The finite set of modes the entity can be in</td>
+						<td style="color:var(--s-idle);">Idle, Patrol, Chase, Attack, Dead</td>
+					</tr>
+					<tr>
+						<td><code>s₀</code></td>
+						<td><strong>Initial state</strong></td>
+						<td>Which state the entity starts in</td>
+						<td style="color:var(--s-idle);">Idle</td>
+					</tr>
+					<tr>
+						<td><code>Σ</code></td>
+						<td><strong>Events / inputs</strong></td>
+						<td>Things that can trigger a transition</td>
+						<td style="color:var(--guard);">PlayerSpotted, ReachedWaypoint, TookDamage</td>
+					</tr>
+					<tr>
+						<td><code>δ</code></td>
+						<td><strong>Transitions</strong></td>
+						<td>Rules: (state + event) → new state</td>
+						<td style="color:var(--trans);">Chase + PlayerLost → Patrol</td>
+					</tr>
+					<tr>
+						<td><code>F</code></td>
+						<td><strong>Terminal states</strong></td>
+						<td>States with no outgoing transitions</td>
+						<td style="color:var(--s-dead);">Dead</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>In practice, game FSMs extend this formal model with lifecycle hooks — the most important practical addition.</p>
+		</div>
+
+		<div class="section">
+			<h2>The three lifecycle hooks</h2>
+
+			<p>Every state gets three hooks. This is where the actual behavior lives — it's the reason you use an FSM instead of raw switch statements.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">State lifecycle</div>
+				<div class="lifecycle">
+					<div class="lc-row">
+						<div class="lc-phase" style="color:var(--action);">OnEnter</div>
+						<div class="lc-bar" style="background:rgba(77,196,98,0.08); border: 1px solid rgba(77,196,98,0.2); color:var(--action);">Runs once when entering this state</div>
+					</div>
+					<div class="lc-desc">Set animation, play sound, initialize timers, configure nav agent, reset counters</div>
+
+					<div class="lc-row">
+						<div class="lc-phase" style="color:var(--s-idle);">OnUpdate</div>
+						<div class="lc-bar" style="background:rgba(232,184,52,0.08); border: 1px solid rgba(232,184,52,0.2); color:var(--s-idle); flex: 3;">Runs every frame while in this state</div>
+					</div>
+					<div class="lc-desc">Check transition conditions, do per-frame work (move toward waypoint, track player, etc.)</div>
+
+					<div class="lc-row">
+						<div class="lc-phase" style="color:var(--s-attack);">OnExit</div>
+						<div class="lc-bar" style="background:rgba(240,101,101,0.08); border: 1px solid rgba(240,101,101,0.2); color:var(--s-attack);">Runs once when leaving this state</div>
+					</div>
+					<div class="lc-desc">Clean up: stop coroutines, reset nav agent, clear target references, stop particles</div>
+				</div>
+
+				<div class="diagram-caption">
+					OnEnter/OnExit are the key advantage over raw if/else — they give you guaranteed setup and teardown. Without them, you're tracking "did I already start the chase animation?" with yet another boolean.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Transitions, guards, and actions</h2>
+
+			<p>A <strong>transition</strong> is a directed edge from one state to another. It has up to three components:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Anatomy of a transition</div>
+				<div class="flow-pipe">
+					<div class="fp-box" style="border-color:var(--s-patrol); color:var(--s-patrol);">Patrol</div>
+					<div class="fp-arrow">→</div>
+					<div class="fp-box" style="border-color:var(--guard); color:var(--guard); font-size:11px;">
+						guard: dist &lt; 10<br>
+						<span style="font-size:9px; color:var(--text-dim);">condition that must be true</span>
+					</div>
+					<div class="fp-arrow">→</div>
+					<div class="fp-box" style="border-color:var(--action); color:var(--action); font-size:11px;">
+						action: PlayBark()<br>
+						<span style="font-size:9px; color:var(--text-dim);">side effect during transition</span>
+					</div>
+					<div class="fp-arrow">→</div>
+					<div class="fp-box" style="border-color:var(--s-chase); color:var(--s-chase);">Chase</div>
+				</div>
+
+				<div class="diagram-caption">
+					<span class="sg">Guards</span> are boolean conditions checked every frame (or on events). If the guard is true, the transition fires.
+					<span class="sact">Actions</span> are one-shot effects that happen <em>during</em> the transition — after the old state's OnExit but before the new state's OnEnter. Most transitions only need a guard.
+				</div>
+			</div>
+
+			<div class="callout">
+				<strong>Transition priority matters.</strong> If multiple outgoing transitions have guards that are simultaneously true, the FSM picks the first one checked. Design your guards so this is either impossible (mutually exclusive conditions) or intentional (higher-priority transitions checked first).
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Polled vs. event-driven transitions</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Style</th>
+						<th>How it works</th>
+						<th>Good for</th>
+					</tr>
+					<tr>
+						<td><strong>Polled</strong></td>
+						<td>Check guard conditions every frame in <code>OnUpdate</code></td>
+						<td>Distance checks, health thresholds, timers — things that change continuously</td>
+					</tr>
+					<tr>
+						<td><strong>Event-driven</strong></td>
+						<td>External systems call <code>fsm.HandleEvent(type)</code></td>
+						<td>Player input, collision triggers, animation events — discrete happenings</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Most game FSMs use <strong>both</strong>. Enemy AI tends to be polled (checking distance to player every frame). Player controllers tend to be event-driven (reacting to input). Game managers are almost entirely event-driven.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: WORKED EXAMPLE                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-example">
+
+		<div class="section">
+			<h2>Example: enemy guard AI</h2>
+
+			<p>A guard enemy in a stealth game. Five states, eight transitions — complex enough to show all the concepts, simple enough to trace by hand.</p>
+
+			<div class="state-cards">
+				<div class="scard">
+					<div class="sc-name" style="color:var(--s-idle);">Idle</div>
+					<div class="sc-sub">stands at post</div>
+				</div>
+				<div class="scard">
+					<div class="sc-name" style="color:var(--s-patrol);">Patrol</div>
+					<div class="sc-sub">walks waypoints</div>
+				</div>
+				<div class="scard">
+					<div class="sc-name" style="color:var(--s-chase);">Chase</div>
+					<div class="sc-sub">pursues player</div>
+				</div>
+				<div class="scard">
+					<div class="sc-name" style="color:var(--s-attack);">Attack</div>
+					<div class="sc-sub">strikes at melee range</div>
+				</div>
+				<div class="scard">
+					<div class="sc-name" style="color:var(--s-dead);">Dead</div>
+					<div class="sc-sub">terminal state</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The full transition table</h2>
+
+			<p>This is the complete specification. Every possible behavior change is here — if a transition isn't in this table, it cannot happen.</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>#</th>
+						<th>From</th>
+						<th>To</th>
+						<th>Guard (condition)</th>
+						<th>Priority</th>
+					</tr>
+					<tr>
+						<td style="color:var(--text-dim);">T1</td>
+						<td style="color:var(--s-idle);">Idle</td>
+						<td style="color:var(--s-patrol);">Patrol</td>
+						<td><span class="sg">idleTimer &gt; 3s</span></td>
+						<td>—</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-dim);">T2</td>
+						<td style="color:var(--s-idle);">Idle</td>
+						<td style="color:var(--s-chase);">Chase</td>
+						<td><span class="sg">canSeePlayer</span></td>
+						<td>beats T1</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-dim);">T3</td>
+						<td style="color:var(--s-patrol);">Patrol</td>
+						<td style="color:var(--s-idle);">Idle</td>
+						<td><span class="sg">reachedWaypoint</span></td>
+						<td>—</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-dim);">T4</td>
+						<td style="color:var(--s-patrol);">Patrol</td>
+						<td style="color:var(--s-chase);">Chase</td>
+						<td><span class="sg">canSeePlayer</span></td>
+						<td>beats T3</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-dim);">T5</td>
+						<td style="color:var(--s-chase);">Chase</td>
+						<td style="color:var(--s-attack);">Attack</td>
+						<td><span class="sg">dist &lt; attackRange</span></td>
+						<td>—</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-dim);">T6</td>
+						<td style="color:var(--s-chase);">Chase</td>
+						<td style="color:var(--s-patrol);">Patrol</td>
+						<td><span class="sg">!canSeePlayer &amp;&amp; lostTimer &gt; 5s</span></td>
+						<td>—</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-dim);">T7</td>
+						<td style="color:var(--s-attack);">Attack</td>
+						<td style="color:var(--s-chase);">Chase</td>
+						<td><span class="sg">attackFinished &amp;&amp; dist &gt; attackRange</span></td>
+						<td>—</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-dim);">T8</td>
+						<td style="color:var(--text-dim);">ANY</td>
+						<td style="color:var(--s-dead);">Dead</td>
+						<td><span class="sg">health ≤ 0</span></td>
+						<td>highest</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>T8 is a "global" transition</strong> — it fires from any state. This is the standard pattern for death, stun, or interrupt effects. Check global transitions <em>before</em> state-specific ones so they always take priority.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Tracing a scenario</h2>
+
+			<p>The guard spawns, idles for 3 seconds, patrols, spots the player, chases, attacks, player retreats, chases again, takes lethal damage. Every transition traced:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Timeline trace</div>
+
+				<div class="scroll-hint">
+					<div class="trans-row">
+						<div class="trans-from" style="border-color:var(--accent); color:var(--accent); background:rgba(124,92,224,0.06);">START</div>
+						<div class="trans-arrow">→</div>
+						<div class="trans-to" style="border-color:var(--s-idle); color:var(--s-idle); background:rgba(232,184,52,0.06);">Idle</div>
+						<div class="trans-label">initial state · <span class="sact">OnEnter: start idleTimer, play idle anim</span></div>
+					</div>
+
+					<div class="trans-row">
+						<div class="trans-from" style="border-color:var(--s-idle); color:var(--s-idle); background:rgba(232,184,52,0.06);">Idle</div>
+						<div class="trans-arrow">→</div>
+						<div class="trans-to" style="border-color:var(--s-patrol); color:var(--s-patrol); background:rgba(77,196,98,0.06);">Patrol</div>
+						<div class="trans-label">T1 · <span class="sg">idleTimer &gt; 3s</span> · <span class="sact">OnEnter: pick waypoint, walk anim, agent.speed=2</span></div>
+					</div>
+
+					<div class="trans-row">
+						<div class="trans-from" style="border-color:var(--s-patrol); color:var(--s-patrol); background:rgba(77,196,98,0.06);">Patrol</div>
+						<div class="trans-arrow">→</div>
+						<div class="trans-to" style="border-color:var(--s-chase); color:var(--s-chase); background:rgba(232,136,58,0.06);">Chase</div>
+						<div class="trans-label">T4 · <span class="sg">canSeePlayer</span> · <span class="sact">OnEnter: agent.speed=6, alert bark</span></div>
+					</div>
+
+					<div class="trans-row">
+						<div class="trans-from" style="border-color:var(--s-chase); color:var(--s-chase); background:rgba(232,136,58,0.06);">Chase</div>
+						<div class="trans-arrow">→</div>
+						<div class="trans-to" style="border-color:var(--s-attack); color:var(--s-attack); background:rgba(240,101,101,0.06);">Attack</div>
+						<div class="trans-label">T5 · <span class="sg">dist &lt; attackRange</span> · <span class="sact">OnEnter: stop nav, trigger attack anim</span></div>
+					</div>
+
+					<div class="trans-row">
+						<div class="trans-from" style="border-color:var(--s-attack); color:var(--s-attack); background:rgba(240,101,101,0.06);">Attack</div>
+						<div class="trans-arrow">→</div>
+						<div class="trans-to" style="border-color:var(--s-chase); color:var(--s-chase); background:rgba(232,136,58,0.06);">Chase</div>
+						<div class="trans-label">T7 · <span class="sg">attackFinished &amp;&amp; dist &gt; attackRange</span> · <span class="sact">OnEnter: resume nav</span></div>
+					</div>
+
+					<div class="trans-row">
+						<div class="trans-from" style="border-color:var(--s-chase); color:var(--s-chase); background:rgba(232,136,58,0.06);">Chase</div>
+						<div class="trans-arrow">→</div>
+						<div class="trans-to" style="border-color:var(--s-dead); color:var(--s-dead); background:rgba(92,99,128,0.06);">Dead</div>
+						<div class="trans-label">T8 (global) · <span class="sg">health ≤ 0</span> · <span class="sact">OnEnter: ragdoll, drop loot, disable collider</span></div>
+					</div>
+				</div>
+			</div>
+
+			<p>Each transition fires exactly one OnExit (old state) then one OnEnter (new state). At no point is the entity in two states simultaneously.</p>
+		</div>
+
+		<div class="section">
+			<h2>What each OnUpdate actually does</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>State</th>
+						<th>OnUpdate (every frame)</th>
+						<th>Transitions checked (in order)</th>
+					</tr>
+					<tr>
+						<td style="color:var(--s-idle);">Idle</td>
+						<td>Increment idleTimer. Face random direction slowly.</td>
+						<td>T8 → T2 → T1</td>
+					</tr>
+					<tr>
+						<td style="color:var(--s-patrol);">Patrol</td>
+						<td>NavMeshAgent moves toward current waypoint.</td>
+						<td>T8 → T4 → T3</td>
+					</tr>
+					<tr>
+						<td style="color:var(--s-chase);">Chase</td>
+						<td>Set agent destination = player pos. Track lostTimer.</td>
+						<td>T8 → T5 → T6</td>
+					</tr>
+					<tr>
+						<td style="color:var(--s-attack);">Attack</td>
+						<td>Face player. Wait for animation.</td>
+						<td>T8 → T7</td>
+					</tr>
+					<tr>
+						<td style="color:var(--s-dead);">Dead</td>
+						<td>Nothing.</td>
+						<td>None (terminal)</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>Every state checks T8 (death) first.</strong> This is the "global transition" pattern — rather than duplicating logic in a wrapper, each state simply checks the global condition at the top of its OnUpdate before anything else.
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: PATTERNS                                   -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-patterns">
+
+		<div class="section">
+			<h2>Three implementation patterns</h2>
+
+			<p>There are three common ways to implement an FSM in Unity C#. Choosing the wrong one wastes either your time (over-engineering) or your future time (under-engineering).</p>
+
+			<div class="pattern-grid">
+				<div class="pat-card">
+					<div class="pc-title">Enum + Switch</div>
+					<div class="pc-when">
+						States ≤ 5<br>
+						Simple logic per state<br>
+						No reuse across entities<br>
+						Game managers, simple enemies
+					</div>
+					<div class="pc-tag" style="background:rgba(77,196,98,0.12); color:var(--action);">start here</div>
+				</div>
+				<div class="pat-card">
+					<div class="pc-title">State Objects</div>
+					<div class="pc-when">
+						States &gt; 5 or complex logic<br>
+						Need proper enter/exit<br>
+						Reuse across entity types<br>
+						Player, main enemies
+					</div>
+					<div class="pc-tag" style="background:rgba(232,184,52,0.12); color:var(--s-idle);">most games need this</div>
+				</div>
+				<div class="pat-card">
+					<div class="pc-title">Hierarchical (HFSM)</div>
+					<div class="pc-when">
+						Nested sub-states<br>
+						"Combat" has sub-states<br>
+						Boss AI with phases<br>
+						Very complex entities
+					</div>
+					<div class="pc-tag" style="background:rgba(240,101,101,0.12); color:var(--s-attack);">when you outgrow flat</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Pattern 1: Enum + Switch</h2>
+
+			<p>Everything lives in one MonoBehaviour. States are enum values. Behavior is a switch in <code>Update()</code>. Transitions are direct enum assignments.</p>
+
+			<div class="codeblock"><span class="kw">public class</span> <span class="tp">GameManager</span> : <span class="tp">MonoBehaviour</span>
+				{
+				<span class="kw">enum</span> <span class="tp">GameState</span> { Menu, Playing, Paused, GameOver }
+				<span class="tp">GameState</span> _state = <span class="tp">GameState</span>.Menu;
+
+				<span class="kw">void</span> <span class="fn">Update</span>()
+				{
+				<span class="kw">switch</span> (_state)
+				{
+				<span class="kw">case</span> <span class="tp">GameState</span>.Menu:
+				<span class="kw">if</span> (startPressed) <span class="fn">ChangeState</span>(<span class="tp">GameState</span>.Playing);
+				<span class="kw">break</span>;
+				<span class="kw">case</span> <span class="tp">GameState</span>.Playing:
+				<span class="kw">if</span> (Input.GetKeyDown(KeyCode.Escape))
+				<span class="fn">ChangeState</span>(<span class="tp">GameState</span>.Paused);
+				<span class="kw">if</span> (playerHealth &lt;= <span class="num">0</span>)
+				<span class="fn">ChangeState</span>(<span class="tp">GameState</span>.GameOver);
+				<span class="kw">break</span>;
+				}
+				}
+
+				<span class="kw">void</span> <span class="fn">ChangeState</span>(<span class="tp">GameState</span> next)
+				{
+				<span class="cm">// Exit logic</span>
+				<span class="kw">switch</span> (_state) {
+				<span class="kw">case</span> <span class="tp">GameState</span>.Paused: Time.timeScale = <span class="num">1</span>; <span class="kw">break</span>;
+				}
+				_state = next;
+				<span class="cm">// Enter logic</span>
+				<span class="kw">switch</span> (_state) {
+				<span class="kw">case</span> <span class="tp">GameState</span>.Paused:   Time.timeScale = <span class="num">0</span>; <span class="kw">break</span>;
+				<span class="kw">case</span> <span class="tp">GameState</span>.GameOver: ShowGameOverUI();  <span class="kw">break</span>;
+				}
+				}
+				}</div>
+
+			<p><strong>When this breaks down:</strong> any single state's logic exceeds ~30 lines. You want to share states between entity types. Enter/exit logic bloats <code>ChangeState</code>. Time to upgrade to Pattern 2.</p>
+		</div>
+
+		<div class="section">
+			<h2>Pattern 2: State objects</h2>
+
+			<p>Each state is its own class implementing a common interface. The FSM holds a reference to the current state and delegates to it. <strong>This is the workhorse pattern</strong> — it handles 90% of game FSM needs.</p>
+
+			<div class="codeblock"><span class="kw">public interface</span> <span class="tp">IState</span>
+				{
+				<span class="kw">void</span> <span class="fn">OnEnter</span>();
+				<span class="kw">void</span> <span class="fn">OnUpdate</span>();
+				<span class="kw">void</span> <span class="fn">OnFixedUpdate</span>();
+				<span class="kw">void</span> <span class="fn">OnExit</span>();
+				}
+
+				<span class="kw">public class</span> <span class="tp">StateMachine</span>
+				{
+				<span class="kw">public</span> <span class="tp">IState</span> Current { <span class="kw">get</span>; <span class="kw">private set</span>; }
+
+				<span class="kw">public void</span> <span class="fn">ChangeState</span>(<span class="tp">IState</span> next)
+				{
+				<span class="kw">if</span> (next == <span class="kw">null</span>) <span class="kw">return</span>;
+				Current?.<span class="fn">OnExit</span>();
+				Current = next;
+				Current.<span class="fn">OnEnter</span>();
+				}
+
+				<span class="kw">public void</span> <span class="fn">Update</span>()      =&gt; Current?.<span class="fn">OnUpdate</span>();
+				<span class="kw">public void</span> <span class="fn">FixedUpdate</span>() =&gt; Current?.<span class="fn">OnFixedUpdate</span>();
+				}</div>
+
+			<p>Each state class receives the entity (MonoBehaviour) in its constructor and calls <code>entity.ChangeState(nextState)</code> when transition guards are met. States own their own transition logic.</p>
+		</div>
+
+		<div class="section">
+			<h2>Pattern 3: Hierarchical FSM</h2>
+
+			<p>A state can itself contain a sub-FSM. The classic example: a boss with combat phases.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Hierarchical nesting</div>
+				<div style="font-family:var(--mono); font-size:12px; line-height:1.8; padding: 4px 0;">
+					<div style="color:var(--text-b);">BossAI (root FSM)</div>
+					<div style="padding-left:20px;">
+						<span style="color:var(--s-idle);">├─ Phase1</span>
+						<span style="color:var(--text-dim);"> (sub-FSM)</span>
+					</div>
+					<div style="padding-left:44px; color:var(--text-dim); font-size:11px;">
+						├─ Shoot · ├─ Dodge · └─ Summon
+					</div>
+					<div style="padding-left:20px;">
+						<span style="color:var(--s-chase);">├─ Phase2</span>
+						<span style="color:var(--text-dim);"> (sub-FSM)</span>
+					</div>
+					<div style="padding-left:44px; color:var(--text-dim); font-size:11px;">
+						├─ Charge · ├─ Slam · └─ Enrage
+					</div>
+					<div style="padding-left:20px;">
+						<span style="color:var(--s-dead);">└─ Dead</span>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					The root FSM transitions between phases (Phase1 → Phase2 at 50% HP). Each phase has its own internal states. When the root exits Phase1, the sub-FSM's active state gets OnExit first, then Phase1 itself.
+				</div>
+			</div>
+
+			<p><strong>When you need this:</strong> when you're naming states like <code>CombatMelee</code>, <code>CombatRanged</code>, <code>CombatDefend</code>. Those "Combat" prefixes mean there's a parent state wanting to be a group. Start flat and refactor if needed.</p>
+		</div>
+
+		<div class="section">
+			<h2>Decision guide</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Entity</th>
+						<th>Recommended</th>
+						<th>Why</th>
+					</tr>
+					<tr>
+						<td>Game manager</td>
+						<td>Enum + Switch</td>
+						<td>Few states, minimal per-state logic, one instance</td>
+					</tr>
+					<tr>
+						<td>Simple enemy (slime, turret)</td>
+						<td>Enum + Switch</td>
+						<td>2–4 states, straightforward behavior</td>
+					</tr>
+					<tr>
+						<td>Player controller</td>
+						<td>State Objects</td>
+						<td>Many states, complex enter/exit, grows over time</td>
+					</tr>
+					<tr>
+						<td>Main enemy types</td>
+						<td>State Objects</td>
+						<td>Reusable states, 4+ states with nontrivial logic</td>
+					</tr>
+					<tr>
+						<td>Boss with phases</td>
+						<td>HFSM</td>
+						<td>Natural two-level structure</td>
+					</tr>
+					<tr>
+						<td>UI flow (menus, dialogs)</td>
+						<td>Enum + Switch</td>
+						<td>Simple sequencing, rarely needs reuse</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: UNITY INTEGRATION                          -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-unity">
+
+		<div class="section">
+			<h2>Where the FSM lives in MonoBehaviour</h2>
+
+			<p>The FSM is a plain C# object (not a MonoBehaviour) owned by the entity. The entity delegates its Unity lifecycle callbacks to the FSM:</p>
+
+			<div class="codeblock"><span class="kw">public class</span> <span class="tp">EnemyController</span> : <span class="tp">MonoBehaviour</span>
+				{
+				<span class="kw">readonly</span> <span class="tp">StateMachine</span> _fsm = <span class="kw">new</span>();
+
+				<span class="cm">// Expose references that states will need</span>
+				<span class="kw">public</span> <span class="tp">NavMeshAgent</span> Agent { <span class="kw">get</span>; <span class="kw">private set</span>; }
+				<span class="kw">public</span> <span class="tp">Animator</span> Anim { <span class="kw">get</span>; <span class="kw">private set</span>; }
+				<span class="kw">public</span> <span class="tp">Transform</span> Player { <span class="kw">get</span>; <span class="kw">private set</span>; }
+				<span class="kw">public</span> <span class="tp">Transform</span>[] Waypoints;
+				<span class="kw">public</span> <span class="tp">float</span> SightRange = <span class="num">12f</span>;
+				<span class="kw">public</span> <span class="tp">float</span> AttackRange = <span class="num">2f</span>;
+				<span class="kw">public</span> <span class="tp">float</span> Health = <span class="num">100f</span>;
+
+				<span class="kw">void</span> <span class="fn">Awake</span>()
+				{
+				Agent = GetComponent&lt;<span class="tp">NavMeshAgent</span>&gt;();
+				Anim = GetComponent&lt;<span class="tp">Animator</span>&gt;();
+				Player = GameObject.FindWithTag(<span class="str">"Player"</span>).transform;
+				}
+
+				<span class="kw">void</span> <span class="fn">Start</span>() =&gt; _fsm.<span class="fn">ChangeState</span>(<span class="kw">new</span> <span class="tp">IdleState</span>(<span class="kw">this</span>));
+
+				<span class="kw">void</span> <span class="fn">Update</span>()      =&gt; _fsm.<span class="fn">Update</span>();
+				<span class="kw">void</span> <span class="fn">FixedUpdate</span>() =&gt; _fsm.<span class="fn">FixedUpdate</span>();
+
+				<span class="cm">// Public so states can trigger transitions</span>
+				<span class="kw">public void</span> <span class="fn">ChangeState</span>(<span class="tp">IState</span> next) =&gt; _fsm.<span class="fn">ChangeState</span>(next);
+
+				<span class="kw">public bool</span> <span class="fn">CanSeePlayer</span>()
+				{
+				<span class="tp">Vector3</span> dir = Player.position - transform.position;
+				<span class="kw">if</span> (dir.magnitude &gt; SightRange) <span class="kw">return false</span>;
+				<span class="kw">return</span> !Physics.<span class="fn">Raycast</span>(transform.position + Vector3.up,
+				dir.normalized, dir.magnitude, obstacleMask);
+				}
+				}</div>
+
+			<div class="callout">
+				<strong>Why not make each state a MonoBehaviour?</strong> Adding/removing components on transition is expensive (GC allocation, GetComponent overhead), breaks serialization, and means states can't exist before they're entered. Plain C# objects are created once and essentially free to swap.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Update vs FixedUpdate in states</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Put in OnUpdate (per frame)</th>
+						<th>Put in OnFixedUpdate (physics step)</th>
+					</tr>
+					<tr>
+						<td>Input reading</td>
+						<td>Rigidbody forces / velocity</td>
+					</tr>
+					<tr>
+						<td>Animation parameter updates</td>
+						<td>Physics raycasts for ground checks</td>
+					</tr>
+					<tr>
+						<td>Timer increments (<code>Time.deltaTime</code>)</td>
+						<td>Character controller movement (if physics-based)</td>
+					</tr>
+					<tr>
+						<td>NavMeshAgent destination setting</td>
+						<td>Overlap checks for attack hitboxes</td>
+					</tr>
+					<tr>
+						<td>Transition guard checks</td>
+						<td>—</td>
+					</tr>
+				</table>
+			</div>
+
+			<p><strong>For NavMeshAgent-based enemies</strong> (most enemies), you almost never need <code>OnFixedUpdate</code> — the agent handles its own physics. For the player controller with a Rigidbody, you'll use both.</p>
+		</div>
+
+		<div class="section">
+			<h2>Coroutines inside states</h2>
+
+			<p>Some behaviors are sequential: play attack animation, wait, deal damage at a specific frame, check transitions. Coroutines handle this — but they're tied to the MonoBehaviour, not the state.</p>
+
+			<div class="codeblock"><span class="kw">public class</span> <span class="tp">AttackState</span> : <span class="tp">IState</span>
+				{
+				<span class="kw">readonly</span> <span class="tp">EnemyController</span> _e;
+				<span class="tp">Coroutine</span> _routine;
+
+				<span class="kw">public</span> <span class="fn">AttackState</span>(<span class="tp">EnemyController</span> e) =&gt; _e = e;
+
+				<span class="kw">public void</span> <span class="fn">OnEnter</span>()
+				{
+				_e.Agent.isStopped = <span class="kw">true</span>;
+				_e.Anim.SetTrigger(<span class="str">"Attack"</span>);
+				_routine = _e.<span class="fn">StartCoroutine</span>(<span class="fn">Sequence</span>());
+				}
+
+				<span class="tp">IEnumerator</span> <span class="fn">Sequence</span>()
+				{
+				<span class="kw">yield return new</span> <span class="tp">WaitForSeconds</span>(<span class="num">0.4f</span>); <span class="cm">// wind-up</span>
+				<span class="fn">DealDamage</span>();
+				<span class="kw">yield return new</span> <span class="tp">WaitForSeconds</span>(<span class="num">0.3f</span>); <span class="cm">// follow-through</span>
+				<span class="cm">// Attack finished — check if player retreated</span>
+				<span class="tp">float</span> dist = Vector3.Distance(
+				_e.transform.position, _e.Player.position);
+				<span class="kw">if</span> (dist &gt; _e.AttackRange)
+				_e.<span class="fn">ChangeState</span>(<span class="kw">new</span> <span class="tp">ChaseState</span>(_e));
+				<span class="kw">else</span>
+				_e.<span class="fn">ChangeState</span>(<span class="kw">new</span> <span class="tp">AttackState</span>(_e)); <span class="cm">// self-transition: re-attack</span>
+				}
+
+				<span class="kw">public void</span> <span class="fn">OnExit</span>()
+				{
+				<span class="cm">// CRITICAL: stop coroutine if we exit early (death)</span>
+				<span class="kw">if</span> (_routine != <span class="kw">null</span>) _e.<span class="fn">StopCoroutine</span>(_routine);
+				_e.Agent.isStopped = <span class="kw">false</span>;
+				}
+
+				<span class="kw">public void</span> <span class="fn">OnUpdate</span>()
+				{
+				<span class="cm">// Still check death even during attack</span>
+				<span class="kw">if</span> (_e.Health &lt;= <span class="num">0</span>) _e.<span class="fn">ChangeState</span>(<span class="kw">new</span> <span class="tp">DeadState</span>(_e));
+				}
+
+				<span class="kw">public void</span> <span class="fn">OnFixedUpdate</span>() { }
+				}</div>
+
+			<div class="callout warn">
+				<strong>Always stop coroutines in OnExit.</strong> If the enemy dies mid-attack (T8), the coroutine is still running on the MonoBehaviour. Without cleanup, it will try to deal damage after death or call <code>ChangeState</code> on a dead entity.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Animation integration</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Approach</th>
+						<th>How</th>
+						<th>When to use</th>
+					</tr>
+					<tr>
+						<td><strong>FSM drives Animator</strong></td>
+						<td>OnEnter sets parameters/triggers</td>
+						<td>Simple enemies, 1:1 state-to-clip mapping</td>
+					</tr>
+					<tr>
+						<td><strong>Animator events drive FSM</strong></td>
+						<td>Animation Events call methods that trigger transitions</td>
+						<td>When timing depends on clip length (attacks, casts)</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>The cleanest pattern: <strong>FSM drives Animator for entry</strong> (set animation in OnEnter), <strong>Animation Events drive FSM for exit</strong> (event at end of attack clip triggers transition check). The FSM controls <em>what</em> happens, the animation controls <em>when</em>.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: IMPLEMENTATION                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-impl">
+
+		<div class="section">
+			<h2>Complete PatrolState walkthrough</h2>
+
+			<p>This is the guard's Patrol state from the worked example, fully implemented. It demonstrates every concept: constructor injection, enter/exit hooks, prioritized transition checking, and early return after state change.</p>
+
+			<div class="codeblock"><span class="kw">public class</span> <span class="tp">PatrolState</span> : <span class="tp">IState</span>
+				{
+				<span class="kw">readonly</span> <span class="tp">EnemyController</span> _e;
+				<span class="kw">int</span> _waypointIndex;
+
+				<span class="kw">public</span> <span class="fn">PatrolState</span>(<span class="tp">EnemyController</span> enemy) =&gt; _e = enemy;
+
+				<span class="kw">public void</span> <span class="fn">OnEnter</span>()
+				{
+				_e.Agent.isStopped = <span class="kw">false</span>;
+				_e.Agent.speed = <span class="num">2f</span>;
+				_e.Anim.SetBool(<span class="str">"Walking"</span>, <span class="kw">true</span>);
+				<span class="fn">GoToNextWaypoint</span>();
+				}
+
+				<span class="kw">public void</span> <span class="fn">OnUpdate</span>()
+				{
+				<span class="cm">// T8: global — always first</span>
+				<span class="kw">if</span> (_e.Health &lt;= <span class="num">0</span>) {
+				_e.<span class="fn">ChangeState</span>(<span class="kw">new</span> <span class="tp">DeadState</span>(_e));
+				<span class="kw">return</span>; <span class="cm">// ← CRITICAL: stop executing old state</span>
+				}
+
+				<span class="cm">// T4: player spotted — higher priority than arrival</span>
+				<span class="kw">if</span> (_e.<span class="fn">CanSeePlayer</span>()) {
+				_e.<span class="fn">ChangeState</span>(<span class="kw">new</span> <span class="tp">ChaseState</span>(_e));
+				<span class="kw">return</span>;
+				}
+
+				<span class="cm">// T3: reached waypoint — go idle</span>
+				<span class="kw">if</span> (!_e.Agent.pathPending
+				&amp;&amp; _e.Agent.remainingDistance &lt; <span class="num">0.5f</span>) {
+				_e.<span class="fn">ChangeState</span>(<span class="kw">new</span> <span class="tp">IdleState</span>(_e));
+				<span class="kw">return</span>;
+				}
+				}
+
+				<span class="kw">public void</span> <span class="fn">OnFixedUpdate</span>() { }
+
+				<span class="kw">public void</span> <span class="fn">OnExit</span>()
+				{
+				_e.Anim.SetBool(<span class="str">"Walking"</span>, <span class="kw">false</span>);
+				}
+
+				<span class="kw">void</span> <span class="fn">GoToNextWaypoint</span>()
+				{
+				<span class="kw">if</span> (_e.Waypoints.Length == <span class="num">0</span>) <span class="kw">return</span>;
+				_e.Agent.SetDestination(
+				_e.Waypoints[_waypointIndex].position);
+				_waypointIndex = (_waypointIndex + <span class="num">1</span>)
+				% _e.Waypoints.Length;
+				}
+				}</div>
+		</div>
+
+		<div class="section">
+			<h2>Avoiding GC allocations</h2>
+
+			<p>The code above creates <code>new ChaseState(_e)</code> on every transition. For most games this is fine. If you have 100+ enemies transitioning frequently and see GC spikes in the profiler, pre-allocate:</p>
+
+			<div class="codeblock"><span class="kw">public class</span> <span class="tp">EnemyController</span> : <span class="tp">MonoBehaviour</span>
+				{
+				<span class="cm">// Pre-allocate all states once in Awake</span>
+				<span class="kw">public</span> <span class="tp">IdleState</span>   IdleState   { <span class="kw">get</span>; <span class="kw">private set</span>; }
+				<span class="kw">public</span> <span class="tp">PatrolState</span> PatrolState { <span class="kw">get</span>; <span class="kw">private set</span>; }
+				<span class="kw">public</span> <span class="tp">ChaseState</span>  ChaseState  { <span class="kw">get</span>; <span class="kw">private set</span>; }
+				<span class="kw">public</span> <span class="tp">AttackState</span> AttackState { <span class="kw">get</span>; <span class="kw">private set</span>; }
+				<span class="kw">public</span> <span class="tp">DeadState</span>   DeadState   { <span class="kw">get</span>; <span class="kw">private set</span>; }
+
+				<span class="kw">void</span> <span class="fn">Awake</span>()
+				{
+				IdleState   = <span class="kw">new</span> <span class="tp">IdleState</span>(<span class="kw">this</span>);
+				PatrolState = <span class="kw">new</span> <span class="tp">PatrolState</span>(<span class="kw">this</span>);
+				ChaseState  = <span class="kw">new</span> <span class="tp">ChaseState</span>(<span class="kw">this</span>);
+				AttackState = <span class="kw">new</span> <span class="tp">AttackState</span>(<span class="kw">this</span>);
+				DeadState   = <span class="kw">new</span> <span class="tp">DeadState</span>(<span class="kw">this</span>);
+				}
+
+				<span class="cm">// Now transitions are zero-alloc:</span>
+				<span class="cm">// _e.ChangeState(_e.ChaseState);</span>
+				}</div>
+
+			<div class="callout">
+				<strong>Don't pre-optimize.</strong> Start with <code>new</code> on every transition. Profile first. State object allocations won't show up until you have hundreds of entities transitioning per frame. Premature optimization here costs readability for zero measurable gain in most games.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Debugging: state labels in the scene</h2>
+
+			<div class="codeblock"><span class="cm">// Add to StateMachine</span>
+				<span class="kw">public</span> <span class="tp">string</span> CurrentName =&gt;
+				Current?.GetType().Name ?? <span class="str">"None"</span>;
+
+				<span class="cm">// Add to EnemyController</span>
+				<span class="kw">void</span> <span class="fn">OnDrawGizmos</span>()
+				{
+				#<span class="kw">if</span> UNITY_EDITOR
+				UnityEditor.Handles.Label(
+				transform.position + Vector3.up * <span class="num">2f</span>,
+				_fsm.CurrentName);
+				#<span class="kw">endif</span>
+				}</div>
+
+			<p>When an enemy misbehaves, the floating label immediately tells you what state it's in. From there you read that one state's OnUpdate. Compare this to debugging the boolean swamp, where you'd check every flag and mentally simulate every branch.</p>
+		</div>
+
+		<div class="section">
+			<h2>Gotcha cheat sheet</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Gotcha</th>
+						<th>Fix</th>
+					</tr>
+					<tr>
+						<td>Old state code runs after ChangeState</td>
+						<td><code>return;</code> immediately after every <code>ChangeState()</code> call</td>
+					</tr>
+					<tr>
+						<td>Coroutine runs after state exit</td>
+						<td>Store <code>Coroutine</code> ref, <code>StopCoroutine</code> in OnExit</td>
+					</tr>
+					<tr>
+						<td>Multiple transitions fire same frame</td>
+						<td>Check in priority order, return after first match</td>
+					</tr>
+					<tr>
+						<td>NullRef on state's first frame</td>
+						<td>Create states in <code>Awake</code>, set initial in <code>Start</code></td>
+					</tr>
+					<tr>
+						<td>NavAgent moves during Attack</td>
+						<td><code>agent.isStopped = true</code> in Attack.OnEnter</td>
+					</tr>
+					<tr>
+						<td>Death doesn't fire from certain states</td>
+						<td>Check <code>health ≤ 0</code> at top of every state's OnUpdate</td>
+					</tr>
+					<tr>
+						<td>Re-entering same state doesn't reset</td>
+						<td>ChangeState always calls Exit→Enter, even self-transitions</td>
+					</tr>
+					<tr>
+						<td>Can't tell which state enemies are in</td>
+						<td><code>OnDrawGizmos</code> with <code>_fsm.CurrentName</code></td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Setup checklist for new entities</h2>
+
+			<div class="callout good">
+				<strong>For every new entity type:</strong><br><br>
+				1. Define your states as an enum (even with state objects — useful for serialization and debug logging).<br><br>
+				2. Draw the state diagram on paper — circles for states, arrows for transitions, labels for guard conditions.<br><br>
+				3. Create one C# class per state implementing <code>IState</code>.<br><br>
+				4. Write transition guards in each state's <code>OnUpdate</code>, in priority order (global first).<br><br>
+				5. Add <code>OnDrawGizmos</code> to the controller for scene-view debugging.<br><br>
+				6. Test by forcing the entity into each state and verifying every outgoing transition fires correctly.
+			</div>
+		</div>
+
+	</div>
+
+</div>
+
+<script>
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>

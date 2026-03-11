@@ -1068,21 +1068,18 @@
 			<div class="compare">
 				<div>
 					<div class="compare-label" style="color:var(--pos);">Array of Structs (AoS)</div>
-					<div class="codeblock" style="margin:0; border:none; padding:12px 0; background:transparent;"><span
-						class="kw">struct</span> <span class="tp">Entity</span> {
+					<div class="codeblock" style="margin:0; border:none; padding:12px 0; background:transparent;"><span class="kw">struct</span> <span class="tp">Entity</span> {
 						<span class="tp">float</span> pos_x, pos_y, pos_z;
 						<span class="tp">float</span> vel_x, vel_y, vel_z;
 						<span class="tp">int32_t</span> health, max_health;
 						<span class="tp">char</span> name[<span class="num">32</span>];
 						<span class="tp">uint32_t</span> tex_id, mesh_id;
 						};
-						<span class="tp">Entity</span> entities[N];
-					</div>
+						<span class="tp">Entity</span> entities[N];</div>
 				</div>
 				<div>
 					<div class="compare-label" style="color:var(--hp);">Struct of Arrays (SoA)</div>
-					<div class="codeblock" style="margin:0; border:none; padding:12px 0; background:transparent;"><span
-						class="kw">struct</span> <span class="tp">Entities</span> {
+					<div class="codeblock" style="margin:0; border:none; padding:12px 0; background:transparent;"><span class="kw">struct</span> <span class="tp">Entities</span> {
 						<span class="tp">float</span> *pos_x, *pos_y, *pos_z;
 						<span class="tp">float</span> *vel_x, *vel_y, *vel_z;
 						<span class="tp">int32_t</span> *health, *max_health;
@@ -1655,6 +1652,16 @@
 </div>
 
 <script>
+	// Dedent codeblocks: strip leading tabs caused by HTML structural indentation.
+	// HTML is indented with tabs; code indentation uses spaces — so stripping tabs is safe.
+	document.querySelectorAll('.codeblock').forEach(el => {
+		el.innerHTML = el.innerHTML
+			.split('\n')
+			.map((l, i) => i === 0 ? l : l.replace(/^\t+/, ''))
+			.join('\n')
+			.replace(/\n+$/, '');
+	});
+
 	// Tab switching
 	document.querySelectorAll('.tab-btn').forEach(btn => {
 		btn.addEventListener('click', () => {
