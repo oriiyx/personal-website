@@ -1,0 +1,1767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>OOP is a Failed Paradigm — What Went Wrong & What to Use Instead</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+          /* Semantic colors for this page */
+          --bad: #f06565; /* OOP / bad pattern */
+          --good: #4dc462; /* Good alternative */
+          --neutral: #3d9be8; /* Neutral / info */
+          --warn: #e8b834; /* Warning / tradeoff */
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --c0: #f06565;
+          --c1: #e8b834;
+          --c2: #4dc462;
+          --c3: #3d9be8;
+      }
+
+      * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+      }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      .page {
+          max-width: 860px;
+          margin: 0 auto;
+          padding: 48px 24px 100px;
+      }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 24px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      /* ── Tabs ── */
+      .tab-bar {
+          display: flex;
+          gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+      }
+
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+
+      .tab-btn:hover {
+          color: var(--text);
+          background: var(--surface2);
+      }
+
+      .tab-btn.active {
+          color: #fff;
+          background: var(--accent);
+      }
+
+      .tab-panel {
+          display: none;
+      }
+
+      .tab-panel.active {
+          display: block;
+          animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn {
+          from {
+              opacity: 0;
+              transform: translateY(6px);
+          }
+          to {
+              opacity: 1;
+              transform: translateY(0);
+          }
+      }
+
+      /* ── Prose ── */
+      .section {
+          margin-bottom: 40px;
+      }
+
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .section p {
+          margin-bottom: 14px;
+      }
+
+      .section p:last-child {
+          margin-bottom: 0;
+      }
+
+      strong {
+          color: var(--text-b);
+          font-weight: 600;
+      }
+
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      /* ── Diagrams ── */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* ── Code blocks ── */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+          white-space: pre;
+      }
+
+      .codeblock .kw {
+          color: var(--accent2);
+      }
+
+      .codeblock .cm {
+          color: var(--text-dim);
+          font-style: italic;
+      }
+
+      .codeblock .tp {
+          color: #e599f7;
+      }
+
+      .codeblock .fn {
+          color: var(--c3);
+      }
+
+      .codeblock .str {
+          color: var(--c2);
+      }
+
+      .codeblock .num {
+          color: var(--c1);
+      }
+
+      .codeblock .bad {
+          color: var(--bad);
+      }
+
+      .codeblock .good {
+          color: var(--good);
+      }
+
+      .code-label {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          margin-bottom: 6px;
+          margin-top: 16px;
+      }
+
+      .code-label.bad {
+          color: var(--bad);
+      }
+
+      .code-label.good {
+          color: var(--good);
+      }
+
+      /* ── Callout ── */
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+
+      .callout.bad {
+          background: rgba(240, 101, 101, 0.05);
+          border-color: rgba(240, 101, 101, 0.14);
+      }
+
+      .callout.good {
+          background: rgba(77, 196, 98, 0.05);
+          border-color: rgba(77, 196, 98, 0.14);
+      }
+
+      /* ── Table ── */
+      .tbl-wrap {
+          overflow-x: auto;
+          margin: 16px 0;
+      }
+
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+          vertical-align: top;
+      }
+
+      tr:last-child td {
+          border-bottom: none;
+      }
+
+      /* ── Hierarchy / tree diagrams ── */
+      .tree {
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.8;
+          padding: 4px 0;
+      }
+
+      .tree .node {
+          display: inline-block;
+          padding: 3px 10px;
+          border-radius: 4px;
+          font-weight: 500;
+      }
+
+      .tree .node.root {
+          background: rgba(124, 92, 224, 0.12);
+          color: var(--accent2);
+          border: 1px solid rgba(124, 92, 224, 0.25);
+      }
+
+      .tree .node.mid {
+          background: rgba(232, 184, 52, 0.08);
+          color: var(--c1);
+          border: 1px solid rgba(232, 184, 52, 0.2);
+      }
+
+      .tree .node.leaf {
+          background: rgba(240, 101, 101, 0.08);
+          color: var(--bad);
+          border: 1px solid rgba(240, 101, 101, 0.2);
+      }
+
+      .tree .node.conflict {
+          background: rgba(240, 101, 101, 0.15);
+          color: #ff7b7b;
+          border: 1px solid rgba(240, 101, 101, 0.4);
+          animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+          0%, 100% {
+              border-color: rgba(240, 101, 101, 0.4);
+          }
+          50% {
+              border-color: rgba(240, 101, 101, 0.7);
+          }
+      }
+
+      .tree .branch {
+          color: var(--text-xdim);
+          padding-left: 4px;
+      }
+
+      /* ── Comparison boxes ── */
+      .compare-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+          margin: 20px 0;
+      }
+
+      @media (max-width: 640px) {
+          .compare-grid {
+              grid-template-columns: 1fr;
+          }
+      }
+
+      .compare-box {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 20px;
+      }
+
+      .compare-box.bad-box {
+          border-color: rgba(240, 101, 101, 0.2);
+      }
+
+      .compare-box.good-box {
+          border-color: rgba(77, 196, 98, 0.2);
+      }
+
+      .compare-box .box-label {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          margin-bottom: 12px;
+      }
+
+      .compare-box.bad-box .box-label {
+          color: var(--bad);
+      }
+
+      .compare-box.good-box .box-label {
+          color: var(--good);
+      }
+
+      /* ── Memory layout diagrams ── */
+      .mem-row {
+          display: flex;
+          align-items: center;
+          margin-bottom: 4px;
+      }
+
+      .mem-lbl {
+          width: 130px;
+          flex-shrink: 0;
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          text-align: right;
+          padding-right: 14px;
+      }
+
+      .mem-cells {
+          display: flex;
+          gap: 1px;
+      }
+
+      .mc {
+          height: 30px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          border-radius: 2px;
+          padding: 0 6px;
+          white-space: nowrap;
+      }
+
+      .mc.bad-cell {
+          background: rgba(240, 101, 101, 0.09);
+          color: var(--bad);
+      }
+
+      .mc.good-cell {
+          background: rgba(77, 196, 98, 0.09);
+          color: var(--good);
+      }
+
+      .mc.neutral-cell {
+          background: rgba(61, 155, 232, 0.09);
+          color: var(--neutral);
+      }
+
+      .mc.warn-cell {
+          background: rgba(232, 184, 52, 0.09);
+          color: var(--c1);
+      }
+
+      .mc.dead-cell {
+          background: rgba(80, 80, 100, 0.05);
+          color: #333850;
+      }
+
+      .mc.ptr-cell {
+          background: rgba(124, 92, 224, 0.09);
+          color: var(--accent2);
+      }
+
+      .mem-gap {
+          width: 12px;
+          flex-shrink: 0;
+      }
+
+      /* ── Flow diagrams ── */
+      .flow {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+          font-family: var(--mono);
+          font-size: 12px;
+          padding: 8px 0;
+      }
+
+      .flow-box {
+          padding: 8px 14px;
+          border-radius: 6px;
+          font-weight: 500;
+      }
+
+      .flow-box.bad-flow {
+          background: rgba(240, 101, 101, 0.08);
+          color: var(--bad);
+          border: 1px solid rgba(240, 101, 101, 0.2);
+      }
+
+      .flow-box.good-flow {
+          background: rgba(77, 196, 98, 0.08);
+          color: var(--good);
+          border: 1px solid rgba(77, 196, 98, 0.2);
+      }
+
+      .flow-box.neutral-flow {
+          background: rgba(61, 155, 232, 0.08);
+          color: var(--neutral);
+          border: 1px solid rgba(61, 155, 232, 0.2);
+      }
+
+      .flow-arrow {
+          color: var(--text-xdim);
+          font-size: 16px;
+          flex-shrink: 0;
+      }
+
+      /* ── Inline colored labels ── */
+      .cr {
+          color: var(--bad);
+      }
+
+      .cg {
+          color: var(--good);
+      }
+
+      .cb {
+          color: var(--neutral);
+      }
+
+      .cy {
+          color: var(--c1);
+      }
+
+      .cp {
+          color: var(--accent2);
+      }
+
+      .scroll-hint {
+          min-width: 580px;
+      }
+
+      /* ── Responsive ── */
+      @media (max-width: 640px) {
+          .tab-btn {
+              font-size: 10px;
+              padding: 7px 10px;
+          }
+
+          .mem-lbl {
+              width: 80px;
+              font-size: 9px;
+          }
+
+          .page-header h1 {
+              font-size: 20px;
+          }
+      }
+
+      /* ── Vs divider ── */
+      .vs-divider {
+          text-align: center;
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-xdim);
+          padding: 8px 0;
+          letter-spacing: 2px;
+      }
+
+      /* ── Quote attribution ── */
+      .quote-attr {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 8px;
+          text-align: right;
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<a class="back-link" href="/lab/"
+		 style="font-family:var(--mono);font-size:11px;color:var(--text-dim);text-decoration:none;display:inline-block;margin-bottom:24px;letter-spacing:0.3px;">←
+		back to lab</a>
+
+	<div class="page-header">
+		<h1>why OOP failed — and what actually works</h1>
+		<div class="sub">inheritance is not a feature · encapsulation is not a goal · your objects are not "real things"
+		</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="lie">The Core Lie</button>
+		<button class="tab-btn" data-tab="damage">What OOP Does to Code</button>
+		<button class="tab-btn" data-tab="inversion">The Abstraction Inversion</button>
+		<button class="tab-btn" data-tab="composition">Composition &gt; Inheritance</button>
+		<button class="tab-btn" data-tab="alternatives">The Better Alternatives</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 1: THE CORE LIE                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-lie">
+
+		<div class="section">
+			<h2>The promise OOP sold you</h2>
+
+			<p>Every introductory OOP course teaches the same thing: <strong>objects model real-world entities.</strong> A
+				<code>Dog</code> extends <code>Animal</code>. A <code>Car</code> extends <code>Vehicle</code>. You organize your
+				code the way you organize reality — as a taxonomy of things with shared properties. Inheritance gives you free
+				code reuse. Encapsulation gives you safety. Polymorphism gives you flexibility.</p>
+
+			<p>This is seductive, intuitive, and almost entirely wrong. Real-world domains don't form clean trees. The moment
+				you try to model anything non-trivial, the hierarchy fights you. You spend more time refactoring your taxonomy
+				than solving the actual problem.</p>
+
+			<p>As Casey Muratori put it: OOP was supposed to make code easier to reason about by mapping it to the real world.
+				Instead it created an artificial world — the class hierarchy — that you now have to maintain <em>in addition
+					to</em> the real problem.</p>
+		</div>
+
+		<div class="section">
+			<h2>The diamond problem isn't an edge case — it's the normal case</h2>
+
+			<p>Consider a game engine. You start with a reasonable-looking hierarchy:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">The "clean" hierarchy (day 1)</div>
+				<div class="tree">
+					<div style="text-align:center; padding: 8px 0;">
+						<span class="node root">Entity</span>
+					</div>
+					<div style="text-align:center; padding: 4px 0;">
+						<span class="branch">├──</span> <span class="node mid">Creature</span>
+						<span style="margin: 0 20px;" class="branch">├──</span> <span class="node mid">Vehicle</span>
+						<span style="margin: 0 20px;" class="branch">├──</span> <span class="node mid">Item</span>
+					</div>
+					<div style="text-align:center; padding: 4px 0;">
+						<span class="branch">├──</span> <span class="node leaf">Fish</span>
+						<span style="margin: 0 4px;" class="branch">├──</span> <span class="node leaf">Bird</span>
+						<span style="margin: 0 20px;" class="branch">├──</span> <span class="node leaf">Boat</span>
+						<span style="margin: 0 4px;" class="branch">├──</span> <span class="node leaf">Car</span>
+						<span style="margin: 0 20px;" class="branch">├──</span> <span class="node leaf">Weapon</span>
+					</div>
+				</div>
+				<div class="diagram-caption">Everything has exactly one parent. The world makes sense. Ship it.</div>
+			</div>
+
+			<p>Then requirements arrive. A <code>FlyingFish</code> needs to swim (Creature→Fish) and fly (Creature→Bird). An
+				<code>AmphibiousVehicle</code> drives on land (Vehicle→Car) and floats on water (Vehicle→Boat). A <code>MountedTurret</code>
+				is both a Vehicle and a Weapon. A <code>DragonMount</code> is a Creature, a Vehicle, and it has an attack — so
+				is it also a Weapon?</p>
+
+			<div class="diagram">
+				<div class="diagram-title">The hierarchy after real requirements (day 30)</div>
+				<div class="tree">
+					<div style="text-align:center; padding: 8px 0;">
+						<span class="node root">Entity</span>
+					</div>
+					<div style="text-align:center; padding: 4px 0;">
+						<span class="branch">├──</span> <span class="node mid">Creature</span>
+						<span style="margin: 0 20px;" class="branch">├──</span> <span class="node mid">Vehicle</span>
+						<span style="margin: 0 20px;" class="branch">├──</span> <span class="node mid">Item</span>
+					</div>
+					<div style="text-align:center; padding: 4px 0;">
+						<span class="branch">├──</span> <span class="node conflict">FlyingFish ???</span>
+						<span style="margin: 0 8px;" class="branch">├──</span> <span
+						class="node conflict">AmphibiousVehicle ???</span>
+						<span style="margin: 0 8px;" class="branch">├──</span> <span class="node conflict">DragonMount ???</span>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					<span class="cr">???</span> = needs multiple parents. Single inheritance can't express this.
+					Multiple inheritance creates the diamond problem. Neither works.
+				</div>
+			</div>
+
+			<p>The OOP response to this is always the same: "you designed the hierarchy wrong." But that's the point —
+				<strong>there is no correct hierarchy.</strong> The real world doesn't have a single canonical taxonomy. A
+				flying fish is simultaneously a fish (by biology), a flying thing (by locomotion), and a prey animal (by
+				ecology). Which axis you choose as "the" inheritance axis is arbitrary, and every choice makes the other axes
+				painful.</p>
+		</div>
+
+		<div class="section">
+			<h2>is-a vs. has-a: the question OOP can't answer</h2>
+
+			<p>Is a <code>Stack</code> a <code>List</code>? If you inherit from <code>List</code>, you get <code>push</code>
+				and <code>pop</code> for free — but you also expose <code>insertAt()</code>, <code>removeAt()</code>, and <code>sort()</code>,
+				which violate stack semantics. So a Stack is-not-a List. But it has-a List internally.</p>
+
+			<p>Is an <code>Employee</code> a <code>Person</code>? Seems obvious: yes. But a Person can become an Employee,
+				then become a Contractor, then go back to being just a Person. <strong>Inheritance is static; the real world is
+					not.</strong> You can't change an object's class at runtime (in most languages). So now you need the Strategy
+				pattern, or the State pattern, or a Role object — all of which are workarounds for inheritance being the wrong
+				abstraction.</p>
+
+			<div class="callout bad">
+				<strong>Brian Will's core observation:</strong> OOP forces a taxonomic question ("what <em>is</em> this thing?")
+				that has no stable answer. The useful question is "what does this thing <em>need to do right now</em>?" — which
+				is a question about capabilities, not identity. Capabilities compose; identities don't.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The pattern explosion</h2>
+
+			<p>The Gang of Four design patterns book contains 23 patterns. Most of them exist to work around limitations of
+				class-based OOP: Visitor compensates for the inability to add operations to a closed class hierarchy. Strategy
+				compensates for the inability to swap behavior without subclassing. Observer compensates for the tight coupling
+				that encapsulation creates. Abstract Factory compensates for the fact that <code>new ClassName()</code> is a
+				hard dependency.</p>
+
+			<p>In languages without class-based OOP — where you have first-class functions, interfaces, and composition — most
+				of these patterns dissolve into one-liners. A "Strategy" is just a function argument. A "Factory" is just a
+				function that returns a value. An "Observer" is just a callback.</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>OOP Pattern</th>
+						<th>What it compensates for</th>
+						<th>Without OOP</th>
+					</tr>
+					<tr>
+						<td>Strategy</td>
+						<td>Can't pass behavior as a value</td>
+						<td>Function argument</td>
+					</tr>
+					<tr>
+						<td>Observer</td>
+						<td>Can't subscribe without coupling</td>
+						<td>Callback / channel</td>
+					</tr>
+					<tr>
+						<td>Factory</td>
+						<td><code>new</code> is a hard dependency</td>
+						<td>Constructor function</td>
+					</tr>
+					<tr>
+						<td>Visitor</td>
+						<td>Can't add methods to existing types</td>
+						<td>Type switch / pattern match</td>
+					</tr>
+					<tr>
+						<td>Decorator</td>
+						<td>Inheritance is the only extension axis</td>
+						<td>Function wrapping / middleware</td>
+					</tr>
+					<tr>
+						<td>Command</td>
+						<td>Actions must be objects to be stored</td>
+						<td>Closures</td>
+					</tr>
+					<tr>
+						<td>Template Method</td>
+						<td>Can't parameterize a step in an algorithm</td>
+						<td>Higher-order function</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Design patterns are not a sign of a language's power. They're a sign of its limitations. As Peter Norvig
+				showed: 16 of the 23 GoF patterns are invisible or trivial in languages with first-class functions.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 2: WHAT OOP DOES TO YOUR CODE               -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-damage">
+
+		<div class="section">
+			<h2>Encapsulation hides the wrong thing</h2>
+
+			<p>The sales pitch: encapsulation protects you from implementation details. The reality: <strong>it hides the data
+				you need to reason about while exposing the behavior that creates coupling.</strong></p>
+
+			<p>When you debug a system, you're almost always asking: "what is the state right now?" Encapsulation makes this
+				harder. The data is scattered across private fields of dozens of objects, accessible only through getter chains.
+				You can't just inspect a data structure — you have to trace method calls through layers of indirection to
+				reconstruct the state in your head.</p>
+
+			<p>Meanwhile, the public methods — the "encapsulated" interface — are the primary coupling surface. Every consumer
+				depends on those method signatures. Change a public method, and every caller breaks. Encapsulation didn't
+				isolate anything; it just added a layer of indirection between you and the data you need.</p>
+
+			<div class="compare-grid">
+				<div class="compare-box bad-box">
+					<div class="box-label">Encapsulated OOP — where's the state?</div>
+					<div class="codeblock" style="border:none; padding: 12px 0; margin:0; background:transparent;"><span
+						class="tp">class</span> <span class="bad">OrderService</span> {
+						<span class="kw">private</span> repo: OrderRepository;
+						<span class="kw">private</span> validator: OrderValidator;
+						<span class="kw">private</span> pricing: PricingEngine;
+						<span class="kw">private</span> notifier: NotificationService;
+
+						<span class="fn">process</span>(id: string) {
+						<span class="kw">const</span> order = <span class="kw">this</span>.repo.<span class="fn">find</span>(id);
+						<span class="kw">this</span>.validator.<span class="fn">validate</span>(order);
+						<span class="kw">this</span>.pricing.<span class="fn">apply</span>(order);
+						<span class="kw">this</span>.notifier.<span class="fn">send</span>(order);
+						<span class="cm">// What did pricing do to order?</span>
+						<span class="cm">// Did validator mutate it?</span>
+						<span class="cm">// What state is notifier in?</span>
+						<span class="cm">// Nobody knows.</span>
+						}
+						}
+					</div>
+				</div>
+				<div class="compare-box good-box">
+					<div class="box-label">Procedural — state is visible</div>
+					<div class="codeblock" style="border:none; padding: 12px 0; margin:0; background:transparent;"><span
+						class="kw">func</span> <span class="fn">processOrder</span>(db *DB, id <span class="tp">string</span>) <span
+						class="tp">error</span> {
+						order, err := db.<span class="fn">FindOrder</span>(id)
+						<span class="kw">if</span> err != <span class="kw">nil</span> { <span class="kw">return</span> err }
+
+						<span class="kw">if</span> err := <span class="fn">validateOrder</span>(order); err != <span
+							class="kw">nil</span> {
+						<span class="kw">return</span> err
+						}
+
+						order.Total = <span class="fn">calculatePrice</span>(order.Items)
+						<span class="cm">// ^ I can see exactly what changed</span>
+
+						<span class="kw">return</span> <span class="fn">sendNotification</span>(order.Email, order.Total)
+						<span class="cm">// ^ pure function of its arguments</span>
+						}
+					</div>
+				</div>
+			</div>
+
+			<p>In the Go version, you can see every piece of state, every mutation, and every data dependency by reading top
+				to bottom. In the OOP version, you need to open 4 classes to understand what <code>process()</code> does.</p>
+		</div>
+
+		<div class="section">
+			<h2>Virtual dispatch: what the CPU actually sees</h2>
+
+			<p>When you call <code>animal.speak()</code> on a polymorphic object, the compiler can't know at compile time
+				which <code>speak()</code> to call. It generates an indirect call through a <strong>vtable</strong> — a pointer
+				to a table of function pointers. Here's what that looks like in memory:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Object layout with vtable (typical C++ / Java / C#)</div>
+				<div class="scroll-hint">
+					<div class="mem-row">
+						<div class="mem-lbl">Dog object</div>
+						<div class="mem-cells">
+							<div class="mc ptr-cell" style="width:100px;">vptr →</div>
+							<div class="mc good-cell" style="width:60px;">name</div>
+							<div class="mc good-cell" style="width:60px;">age</div>
+							<div class="mc good-cell" style="width:60px;">breed</div>
+						</div>
+					</div>
+					<div style="height: 6px;"></div>
+					<div class="mem-row">
+						<div class="mem-lbl">Dog vtable</div>
+						<div class="mem-cells">
+							<div class="mc ptr-cell" style="width:100px;">→ speak()</div>
+							<div class="mc ptr-cell" style="width:100px;">→ move()</div>
+							<div class="mc ptr-cell" style="width:100px;">→ eat()</div>
+						</div>
+					</div>
+					<div style="height: 16px;"></div>
+					<div class="mem-row">
+						<div class="mem-lbl">Cat object</div>
+						<div class="mem-cells">
+							<div class="mc ptr-cell" style="width:100px;">vptr →</div>
+							<div class="mc good-cell" style="width:60px;">name</div>
+							<div class="mc good-cell" style="width:60px;">age</div>
+							<div class="mc good-cell" style="width:60px;">indoor</div>
+						</div>
+					</div>
+					<div style="height: 6px;"></div>
+					<div class="mem-row">
+						<div class="mem-lbl">Cat vtable</div>
+						<div class="mem-cells">
+							<div class="mc ptr-cell" style="width:100px;">→ speak()</div>
+							<div class="mc ptr-cell" style="width:100px;">→ move()</div>
+							<div class="mc ptr-cell" style="width:100px;">→ eat()</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					Every polymorphic object carries a hidden pointer (vptr) to its class's vtable.
+					Every virtual call is: <code>load vptr → load function pointer → indirect call</code>.
+					That's 2 dependent pointer chases before any work happens.
+				</div>
+			</div>
+
+			<p>This has three concrete costs:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Cost</th>
+						<th>What happens</th>
+						<th>Why it matters</th>
+					</tr>
+					<tr>
+						<td><span class="cr">No inlining</span></td>
+						<td>Compiler can't see through the indirect call</td>
+						<td>Inlining is the #1 optimization — it enables constant folding, dead code elimination, register
+							allocation across the call boundary. Virtual dispatch blocks all of it.
+						</td>
+					</tr>
+					<tr>
+						<td><span class="cr">Branch misprediction</span></td>
+						<td>CPU branch predictor can't predict the target of an indirect jump through a pointer that changes per
+							object type
+						</td>
+						<td>A misprediction costs ~15–20 cycles. In a tight loop over a heterogeneous array of Animals, every call
+							mispredicts.
+						</td>
+					</tr>
+					<tr>
+						<td><span class="cr">Cache misses</span></td>
+						<td>Objects scattered on the heap, vtables scattered in code</td>
+						<td>Iterating over a <code>List&lt;Animal&gt;</code> chases pointers to random memory locations. The
+							prefetcher can't help.
+						</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="vs-divider">— vs —</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Flat array + type switch (data-oriented approach)</div>
+				<div class="scroll-hint">
+					<div class="mem-row">
+						<div class="mem-lbl">types[]</div>
+						<div class="mem-cells">
+							<div class="mc warn-cell" style="width:40px;">DOG</div>
+							<div class="mc warn-cell" style="width:40px;">CAT</div>
+							<div class="mc warn-cell" style="width:40px;">DOG</div>
+							<div class="mc warn-cell" style="width:40px;">CAT</div>
+							<div class="mc warn-cell" style="width:40px;">DOG</div>
+							<div class="mc warn-cell" style="width:40px;">DOG</div>
+							<div class="mc warn-cell" style="width:40px;">CAT</div>
+							<div class="mc warn-cell" style="width:40px;">DOG</div>
+						</div>
+					</div>
+					<div class="mem-row">
+						<div class="mem-lbl">names[]</div>
+						<div class="mem-cells">
+							<div class="mc good-cell" style="width:40px;">Rex</div>
+							<div class="mc good-cell" style="width:40px;">Mia</div>
+							<div class="mc good-cell" style="width:40px;">Bud</div>
+							<div class="mc good-cell" style="width:40px;">Leo</div>
+							<div class="mc good-cell" style="width:40px;">Max</div>
+							<div class="mc good-cell" style="width:40px;">Ace</div>
+							<div class="mc good-cell" style="width:40px;">Kit</div>
+							<div class="mc good-cell" style="width:40px;">Bo</div>
+						</div>
+					</div>
+					<div class="mem-row">
+						<div class="mem-lbl">ages[]</div>
+						<div class="mem-cells">
+							<div class="mc good-cell" style="width:40px;">3</div>
+							<div class="mc good-cell" style="width:40px;">5</div>
+							<div class="mc good-cell" style="width:40px;">2</div>
+							<div class="mc good-cell" style="width:40px;">7</div>
+							<div class="mc good-cell" style="width:40px;">4</div>
+							<div class="mc good-cell" style="width:40px;">1</div>
+							<div class="mc good-cell" style="width:40px;">6</div>
+							<div class="mc good-cell" style="width:40px;">8</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					Contiguous arrays. Linear memory access. The prefetcher is happy.
+					A <code>switch(types[i])</code> is a direct jump — the branch predictor handles it well,
+					and each case can be fully inlined.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The hidden cost: heap allocation per object</h2>
+
+			<p>OOP languages allocate every object on the heap (Java, C#, Python, Ruby, JavaScript). Even a simple <code>Point(x,
+				y)</code> with two integers triggers a heap allocation, a GC header, and a vtable pointer. In Java, a <code>Point</code>
+				object uses ~32 bytes of memory for 8 bytes of data. In Go or C, two integers in a struct: 8 bytes,
+				stack-allocated, zero overhead.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Java Point object vs. Go struct — actual memory</div>
+				<div class="scroll-hint">
+					<div class="mem-row">
+						<div class="mem-lbl"><span class="cr">Java Point</span></div>
+						<div class="mem-cells">
+							<div class="mc dead-cell" style="width:80px;">mark word</div>
+							<div class="mc dead-cell" style="width:80px;">klass ptr</div>
+							<div class="mc good-cell" style="width:40px;">x</div>
+							<div class="mc good-cell" style="width:40px;">y</div>
+							<div class="mc dead-cell" style="width:60px;">padding</div>
+						</div>
+					</div>
+					<div
+						style="font-family:var(--mono); font-size:10px; color:var(--text-dim); text-align:right; width:130px; display:inline-block; padding-right:14px;">
+						32 bytes on heap
+					</div>
+					<div style="height: 8px;"></div>
+					<div class="mem-row">
+						<div class="mem-lbl"><span class="cg">Go Point</span></div>
+						<div class="mem-cells">
+							<div class="mc good-cell" style="width:40px;">x</div>
+							<div class="mc good-cell" style="width:40px;">y</div>
+						</div>
+					</div>
+					<div
+						style="font-family:var(--mono); font-size:10px; color:var(--text-dim); text-align:right; width:130px; display:inline-block; padding-right:14px;">
+						8 bytes, stack or inline
+					</div>
+				</div>
+				<div class="diagram-caption">
+					<span class="dead-cell"
+								style="background:rgba(80,80,100,0.15); padding: 1px 6px; border-radius:3px; font-family:var(--mono); font-size:10px;">gray</span>
+					= overhead that exists solely because it's an "object."
+					4× memory for the same data.
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 3: THE ABSTRACTION INVERSION                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-inversion">
+
+		<div class="section">
+			<h2>OOP inverts the correct mental model</h2>
+
+			<p>Software is fundamentally about <strong>data transformations</strong>: data comes in, you transform it, data
+				goes out. A web server reads bytes from a socket, parses them into a request struct, routes to a handler, builds
+				a response struct, serializes it back to bytes. That's it. Every program is a pipeline of data transformations.
+			</p>
+
+			<p>OOP tells you to think about this differently: instead of "what transformations happen to the data," you ask
+				"what objects exist and what messages do they send each other?" This is backwards. You're now designing a social
+				network of objects instead of a data pipeline. The objects become the point; the data becomes an afterthought —
+				something that's hidden inside objects and only accessible through method calls.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Two mental models for the same HTTP handler</div>
+
+				<div style="padding: 8px 0;">
+					<div
+						style="font-family:var(--mono); font-size:10px; color:var(--bad); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:10px;">
+						OOP thinking: "what objects exist?"
+					</div>
+					<div class="flow">
+						<div class="flow-box bad-flow">RequestParser</div>
+						<div class="flow-arrow">→ .parse() →</div>
+						<div class="flow-box bad-flow">Router</div>
+						<div class="flow-arrow">→ .route() →</div>
+						<div class="flow-box bad-flow">Controller</div>
+						<div class="flow-arrow">→ .handle() →</div>
+						<div class="flow-box bad-flow">ResponseBuilder</div>
+					</div>
+					<div style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin: 4px 0 20px;">
+						4 objects, 4 interfaces, hidden state, unclear data flow
+					</div>
+				</div>
+
+				<div style="padding: 8px 0;">
+					<div
+						style="font-family:var(--mono); font-size:10px; color:var(--good); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:10px;">
+						Data-flow thinking: "what transformations happen?"
+					</div>
+					<div class="flow">
+						<div class="flow-box neutral-flow">[]byte</div>
+						<div class="flow-arrow">→ parse →</div>
+						<div class="flow-box neutral-flow">Request</div>
+						<div class="flow-arrow">→ route →</div>
+						<div class="flow-box neutral-flow">Handler</div>
+						<div class="flow-arrow">→ handle →</div>
+						<div class="flow-box neutral-flow">Response</div>
+						<div class="flow-arrow">→ serialize →</div>
+						<div class="flow-box neutral-flow">[]byte</div>
+					</div>
+					<div style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-top: 4px;">
+						Data flows left to right. Functions transform it. No hidden state. Each step is testable in isolation.
+					</div>
+				</div>
+			</div>
+
+			<p>In the data-flow model, the data structures <em>are</em> the design. <code>Request</code> and
+				<code>Response</code> are plain structs. The functions between them are stateless transformations. You can test
+				each one independently by constructing the input struct and asserting on the output struct. No mocks, no
+				dependency injection, no service locators.</p>
+		</div>
+
+		<div class="section">
+			<h2>ORMs: the worst manifestation</h2>
+
+			<p>Object-Relational Mappers are the purest example of abstraction inversion. A relational database is already a
+				data-transformation engine — it's set-theoretic, declarative, and operates on flat rows. An ORM wraps this in an
+				object graph, hydrating full objects with all their fields when you need two columns, lazy-loading related
+				objects behind property accessors that silently fire N+1 queries, and mapping a well-designed relational schema
+				into an awkward object hierarchy that fights the database's actual strengths.</p>
+
+			<div class="compare-grid">
+				<div class="compare-box bad-box">
+					<div class="box-label">ORM — hydrate everything, query hidden</div>
+					<div class="codeblock" style="border:none; padding: 12px 0; margin:0; background:transparent;"><span
+						class="cm">// C# Entity Framework</span>
+						<span class="kw">var</span> users = context.Users
+						.<span class="fn">Include</span>(u => u.Orders)
+						.<span class="fn">ThenInclude</span>(o => o.Items)
+						.<span class="fn">Where</span>(u => u.Active)
+						.<span class="fn">ToList</span>();
+
+						<span class="cm">// What SQL did this generate?</span>
+						<span class="cm">// How many joins?</span>
+						<span class="cm">// Did it select all columns?</span>
+						<span class="cm">// What if Orders has 10,000 rows?</span>
+						<span class="cm">// You don't know. The ORM "handles it."</span></div>
+				</div>
+				<div class="compare-box good-box">
+					<div class="box-label">Plain SQL — you see exactly what runs</div>
+					<div class="codeblock" style="border:none; padding: 12px 0; margin:0; background:transparent;"><span
+						class="cm">// Go + sqlc or plain database/sql</span>
+						rows, err := db.<span class="fn">Query</span>(<span class="str">`
+  SELECT u.id, u.name, COUNT(o.id) as order_count
+  FROM users u
+  LEFT JOIN orders o ON o.user_id = u.id
+  WHERE u.active = true
+  GROUP BY u.id, u.name
+`</span>)
+
+						<span class="cm">// Exact SQL. Exact columns. Exact joins.</span>
+						<span class="cm">// Returns only the data you need.</span>
+						<span class="cm">// No hidden queries. No N+1.</span></div>
+				</div>
+			</div>
+
+			<p>The ORM was supposed to save you from writing SQL. Instead, you spend your time learning the ORM's query DSL
+				(which is a worse version of SQL), debugging generated queries, fighting lazy-loading, and adding <code>.Include()</code>
+				chains to avoid N+1 problems that wouldn't exist if you'd written the query yourself.</p>
+
+			<div class="callout bad">
+				<strong>The cruel irony:</strong> ORMs were created because OOP developers didn't want to deal with "raw data"
+				(SQL result sets). But a SQL result set is already a perfect data structure — it's a typed, ordered list of
+				named fields. The ORM converts this into a worse structure (an object graph with hidden lazy-loading) and calls
+				it an improvement.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The Service-Repository-Controller-DTO hall of mirrors</h2>
+
+			<p>Enterprise OOP codebases follow a predictable pattern: every piece of data passes through 5+ layers of
+				abstraction before anything happens. A single "create user" operation touches a <code>UserController</code>, a
+				<code>UserDTO</code>, a <code>UserService</code>, a <code>UserValidator</code>, a <code>UserRepository</code>, a
+				<code>UserEntity</code>, a <code>UserMapper</code>, and a <code>UserResponse</code>. Eight classes. For one
+				database insert.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">The OOP layer cake for a single "create user" operation</div>
+
+				<div class="flow" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+					<div style="display:flex; align-items:center; gap:8px;">
+						<div class="flow-box bad-flow" style="width:170px; text-align:center;">UserController</div>
+						<span
+							style="font-family:var(--mono); font-size:10px; color:var(--text-dim);">validates HTTP, calls service</span>
+					</div>
+					<div style="padding-left:80px; color:var(--text-xdim); font-family:var(--mono); font-size:12px;">↓ UserDTO
+					</div>
+					<div style="display:flex; align-items:center; gap:8px;">
+						<div class="flow-box bad-flow" style="width:170px; text-align:center;">UserService</div>
+						<span style="font-family:var(--mono); font-size:10px; color:var(--text-dim);">business logic (usually just pass-through)</span>
+					</div>
+					<div style="padding-left:80px; color:var(--text-xdim); font-family:var(--mono); font-size:12px;">↓
+						UserEntity
+					</div>
+					<div style="display:flex; align-items:center; gap:8px;">
+						<div class="flow-box bad-flow" style="width:170px; text-align:center;">UserValidator</div>
+						<span style="font-family:var(--mono); font-size:10px; color:var(--text-dim);">checks fields (could be 3 lines in the handler)</span>
+					</div>
+					<div style="padding-left:80px; color:var(--text-xdim); font-family:var(--mono); font-size:12px;">↓
+						UserEntity
+					</div>
+					<div style="display:flex; align-items:center; gap:8px;">
+						<div class="flow-box bad-flow" style="width:170px; text-align:center;">UserRepository</div>
+						<span style="font-family:var(--mono); font-size:10px; color:var(--text-dim);">wraps a single INSERT statement</span>
+					</div>
+					<div style="padding-left:80px; color:var(--text-xdim); font-family:var(--mono); font-size:12px;">↓ UserMapper
+						→ UserResponse
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					Each arrow is a data transformation that copies fields from one struct-like thing to another.
+					The "architecture" is mostly converting between representations of the same data.
+				</div>
+			</div>
+
+			<div class="compare-grid">
+				<div class="compare-box" style="grid-column: 1 / -1; border-color: rgba(77,196,98,0.2);">
+					<div class="box-label" style="color:var(--good);">Go equivalent — one file, one function</div>
+					<div class="codeblock" style="border:none; padding: 12px 0; margin:0; background:transparent;"><span
+						class="kw">func</span> <span class="fn">handleCreateUser</span>(w http.ResponseWriter, r *http.Request) {
+						<span class="kw">var</span> req CreateUserRequest
+						<span class="kw">if</span> err := json.<span class="fn">NewDecoder</span>(r.Body).<span
+							class="fn">Decode</span>(&req); err != <span class="kw">nil</span> {
+						http.<span class="fn">Error</span>(w, <span class="str">"bad request"</span>, <span class="num">400</span>);
+						<span class="kw">return</span>
+						}
+						<span class="kw">if</span> req.Email == <span class="str">""</span> || req.Name == <span
+							class="str">""</span> {
+						http.<span class="fn">Error</span>(w, <span class="str">"email and name required"</span>, <span class="num">422</span>);
+						<span class="kw">return</span>
+						}
+						user, err := db.<span class="fn">Exec</span>(<span class="str">`INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id`</span>,
+						req.Name, req.Email)
+						<span class="kw">if</span> err != <span class="kw">nil</span> {
+						http.<span class="fn">Error</span>(w, <span class="str">"internal error"</span>, <span
+							class="num">500</span>); <span class="kw">return</span>
+						}
+						json.<span class="fn">NewEncoder</span>(w).<span class="fn">Encode</span>(user)
+						}
+					</div>
+				</div>
+			</div>
+
+			<p>Twelve lines. No layers. No mapping. Read top to bottom and you know exactly what happens. The "architecture"
+				is the function.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 4: COMPOSITION OVER INHERITANCE             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-composition">
+
+		<div class="section">
+			<h2>What "no inheritance" looks like in practice</h2>
+
+			<p>Go, Zig, and C have no class inheritance. This is by design, not by oversight. They force you to compose
+				behavior explicitly. The result is code where you can always see exactly what's happening — no hidden parent
+				methods, no fragile base class problem, no override surprises.</p>
+
+			<p>The core insight: <strong>you almost never want "is-a." You want "has-a" or "can-do."</strong> Inheritance
+				conflates code reuse (I want to share this logic) with subtyping (I want this to be substitutable). These are
+				different goals and should be expressed differently.</p>
+		</div>
+
+		<div class="section">
+			<h2>Go interfaces: implicit, structural, small</h2>
+
+			<p>Go interfaces are <strong>satisfied implicitly</strong> — you never write <code>implements IFoo</code>. If your
+				struct has the right methods, it satisfies the interface. This means the interface is defined by the <em>consumer</em>,
+				not the <em>provider</em>. You don't have to predict in advance which interfaces your type might need to
+				satisfy.</p>
+
+			<div class="compare-grid">
+				<div class="compare-box bad-box">
+					<div class="box-label">Java — interface declared at definition site</div>
+					<div class="codeblock" style="border:none; padding: 12px 0; margin:0; background:transparent;"><span
+						class="cm">// The library author must predict</span>
+						<span class="cm">// every interface you'll need</span>
+						<span class="kw">public class</span> <span class="bad">FileStore</span>
+						<span class="kw">implements</span> <span class="tp">Readable</span>, <span class="tp">Writable</span>,
+						<span class="tp">Closeable</span>, <span class="tp">Flushable</span>,
+						<span class="tp">Serializable</span> {
+
+						<span class="cm">// What if you want Cacheable?</span>
+						<span class="cm">// Can't add it without modifying</span>
+						<span class="cm">// the source file. You're stuck.</span>
+						}
+					</div>
+				</div>
+				<div class="compare-box good-box">
+					<div class="box-label">Go — interface declared at call site</div>
+					<div class="codeblock" style="border:none; padding: 12px 0; margin:0; background:transparent;"><span
+						class="cm">// The consumer defines what it needs</span>
+						<span class="kw">type</span> <span class="tp">Reader</span> <span class="kw">interface</span> {
+						<span class="fn">Read</span>(p []<span class="tp">byte</span>) (<span class="tp">int</span>, <span
+							class="tp">error</span>)
+						}
+
+						<span class="cm">// FileStore doesn't know about Reader.</span>
+						<span class="cm">// It just has a Read method.</span>
+						<span class="cm">// Any type with Read([]byte)(int,error)</span>
+						<span class="cm">// satisfies Reader. No declaration needed.</span>
+
+						<span class="kw">func</span> <span class="fn">process</span>(r <span class="tp">Reader</span>) { <span
+							class="cm">/* works */</span> }
+					</div>
+				</div>
+			</div>
+
+			<p>This inverts the dependency: the <em>consumer</em> specifies the minimal interface it requires. The provider
+				doesn't need to know about it. This is real decoupling — not the fake decoupling that Java's
+				<code>implements</code> provides (which is actually a compile-time coupling to the interface definition).</p>
+
+			<div class="callout">
+				<strong>The Go proverb:</strong> "The bigger the interface, the weaker the abstraction." Go's standard library
+				interfaces are tiny: <code>io.Reader</code> (1 method), <code>io.Writer</code> (1 method),
+				<code>fmt.Stringer</code> (1 method), <code>error</code> (1 method). This is not an accident — it's the entire
+				design philosophy.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Embedding vs. inheritance: same result, different semantics</h2>
+
+			<p>Go's embedding gives you code reuse without subtyping. When you embed a struct, its methods get promoted to the
+				outer struct — but there's no "is-a" relationship. The compiler literally copies method references. No vtable,
+				no override chain, no super() calls.</p>
+
+			<div class="compare-grid">
+				<div class="compare-box bad-box">
+					<div class="box-label">Java — inheritance hierarchy for a logger</div>
+					<div class="codeblock" style="border:none; padding: 12px 0; margin:0; background:transparent;"><span
+						class="kw">abstract class</span> <span class="bad">BaseHandler</span> {
+						<span class="kw">protected</span> Logger logger;
+						<span class="kw">protected</span> Metrics metrics;
+
+						<span class="kw">protected void</span> <span class="fn">logRequest</span>(Request r) {
+						logger.<span class="fn">info</span>(<span class="str">"handling: "</span> + r.path);
+						}
+						}
+
+						<span class="kw">class</span> <span class="bad">UserHandler</span> <span class="kw">extends</span> <span
+							class="bad">BaseHandler</span> {
+						<span class="kw">void</span> <span class="fn">handle</span>(Request r) {
+						<span class="fn">logRequest</span>(r); <span class="cm">// inherited</span>
+						<span class="cm">// but now UserHandler IS-A BaseHandler</span>
+						<span class="cm">// can be passed where BaseHandler expected</span>
+						<span class="cm">// fragile base class: if BaseHandler</span>
+						<span class="cm">// changes, all children might break</span>
+						}
+						}
+					</div>
+				</div>
+				<div class="compare-box good-box">
+					<div class="box-label">Go — embedding (has-a with promoted methods)</div>
+					<div class="codeblock" style="border:none; padding: 12px 0; margin:0; background:transparent;"><span
+						class="kw">type</span> <span class="tp">RequestLogger</span> <span class="kw">struct</span> {
+						Logger *slog.Logger
+						}
+
+						<span class="kw">func</span> (rl <span class="tp">RequestLogger</span>) <span class="fn">LogRequest</span>(path
+						<span class="tp">string</span>) {
+						rl.Logger.<span class="fn">Info</span>(<span class="str">"handling"</span>, <span class="str">"path"</span>,
+						path)
+						}
+
+						<span class="kw">type</span> <span class="tp">UserHandler</span> <span class="kw">struct</span> {
+						<span class="tp">RequestLogger</span> <span class="cm">// embedded, not inherited</span>
+						DB *sql.DB
+						}
+
+						<span class="cm">// UserHandler.LogRequest() works.</span>
+						<span class="cm">// But UserHandler is NOT a RequestLogger.</span>
+						<span class="cm">// No subtype relationship. No fragility.</span>
+						<span class="cm">// Just method promotion — syntactic sugar</span>
+						<span class="cm">// for UserHandler having a RequestLogger field.</span></div>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Zig and C: no methods at all, and that's fine</h2>
+
+			<p>Zig and C take the most radical position: there are no methods. There are structs (data) and functions
+				(behavior). A function that operates on a <code>User</code> takes a <code>User*</code> as its first argument.
+				There is zero ambiguity about what it can access or modify.</p>
+
+			<div class="codeblock"><span class="cm">// Zig: functions are namespaced, not owned</span>
+				<span class="kw">const</span> User = <span class="kw">struct</span> {
+				name: []<span class="kw">const</span> <span class="tp">u8</span>,
+				email: []<span class="kw">const</span> <span class="tp">u8</span>,
+				active: <span class="tp">bool</span>,
+
+				<span class="kw">pub fn</span> <span class="fn">isValid</span>(self: User) <span class="tp">bool</span> {
+				<span class="kw">return</span> self.name.len > <span class="num">0</span> <span class="kw">and</span>
+				self.email.len > <span class="num">0</span>;
+				}
+				};
+
+				<span class="cm">// This is just syntax for: fn isValid(self: User) bool</span>
+				<span class="cm">// The struct namespaces the function. That's it.</span>
+				<span class="cm">// No vtable, no virtual, no override, no inheritance.</span>
+				<span class="cm">// user.isValid() compiles to a direct function call.</span></div>
+
+			<p>In Zig, what looks like a method is just a function namespaced inside a struct. The <code>self</code> parameter
+				is explicit. The compiler generates a direct call, not an indirect one. There's nothing to prevent inlining,
+				nothing to confuse the branch predictor, nothing hidden.</p>
+
+			<div class="callout good">
+				<strong>The principle:</strong> behavior is orthogonal to data layout. A <code>User</code> struct defines how
+				data is arranged in memory. Functions that operate on <code>User</code> define transformations. These are two
+				separate concerns, and combining them into a "class" helps neither.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Side-by-side: the same feature in Java vs. Go</h2>
+
+			<p>Problem: multiple types of notification (email, SMS, push) that share a common "send" contract.</p>
+
+			<div class="compare-grid">
+				<div class="compare-box bad-box">
+					<div class="box-label">Java — abstract class + subclasses</div>
+					<div class="codeblock" style="border:none; padding: 12px 0; margin:0; background:transparent;"><span
+						class="kw">abstract class</span> <span class="bad">Notifier</span> {
+						<span class="kw">protected</span> String recipient;
+						<span class="kw">abstract void</span> <span class="fn">send</span>(String msg);
+
+						<span class="kw">void</span> <span class="fn">sendWithRetry</span>(String msg, <span class="kw">int</span>
+						n) {
+						<span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i < n; i++) {
+						<span class="kw">try</span> { <span class="fn">send</span>(msg); <span class="kw">return</span>; }
+						<span class="kw">catch</span> (Exception e) { <span class="cm">/* retry */</span> }
+						}
+						}
+						}
+
+						<span class="kw">class</span> <span class="bad">EmailNotifier</span> <span class="kw">extends</span>
+						Notifier {
+						<span class="kw">void</span> <span class="fn">send</span>(String msg) { <span class="cm">/* SMTP */</span> }
+						}
+						<span class="kw">class</span> <span class="bad">SMSNotifier</span> <span class="kw">extends</span> Notifier
+						{
+						<span class="kw">void</span> <span class="fn">send</span>(String msg) { <span class="cm">/* Twilio */</span>
+						}
+						}
+
+						<span class="cm">// 3 files. Inheritance coupling.</span>
+						<span class="cm">// Can't add retry to a third-party notifier</span>
+						<span class="cm">// without wrapping or inheriting from it.</span></div>
+				</div>
+				<div class="compare-box good-box">
+					<div class="box-label">Go — interface + plain functions</div>
+					<div class="codeblock" style="border:none; padding: 12px 0; margin:0; background:transparent;"><span
+						class="kw">type</span> <span class="tp">Notifier</span> <span class="kw">interface</span> {
+						<span class="fn">Send</span>(msg <span class="tp">string</span>) <span class="tp">error</span>
+						}
+
+						<span class="kw">func</span> <span class="fn">SendWithRetry</span>(n <span class="tp">Notifier</span>, msg
+						<span class="tp">string</span>, attempts <span class="tp">int</span>) <span class="tp">error</span> {
+						<span class="kw">var</span> err <span class="tp">error</span>
+						<span class="kw">for</span> i := <span class="num">0</span>; i < attempts; i++ {
+						<span class="kw">if</span> err = n.<span class="fn">Send</span>(msg); err == <span class="kw">nil</span> {
+						<span class="kw">return nil</span> }
+						}
+						<span class="kw">return</span> err
+						}
+
+						<span class="cm">// EmailNotifier and SMSNotifier are plain structs.</span>
+						<span class="cm">// They don't know about Notifier interface.</span>
+						<span class="cm">// SendWithRetry works with ANY type that has Send.</span>
+						<span class="cm">// Third-party types work automatically.</span></div>
+				</div>
+			</div>
+
+			<p>The Go version has no inheritance, no abstract classes, no coupling between the retry logic and the concrete
+				implementations. <code>SendWithRetry</code> is a free function that works with anything satisfying a one-method
+				interface. The Java version requires every notifier to extend <code>Notifier</code> — a decision that ripples
+				through the entire codebase if you ever want to change it.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 5: THE BETTER ALTERNATIVES                  -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-alternatives">
+
+		<div class="section">
+			<h2>The problem isn't "classes" — it's the paradigm</h2>
+
+			<p>Classes as a namespacing mechanism for data + related functions are fine. Go structs with methods, Zig
+				namespaced functions, Rust <code>impl</code> blocks — these are all "classes" in the useful sense. The problem
+				is the <em>paradigm</em>: the belief that inheritance hierarchies, encapsulation, and polymorphism via virtual
+				dispatch should be the primary organizing principle of your code.</p>
+
+			<p>Most production code doesn't need polymorphism at all. It needs to read data, transform it, and write it
+				somewhere. The question is which paradigm makes those transformations clearest.</p>
+		</div>
+
+		<div class="section">
+			<h2>Paradigm comparison</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th></th>
+						<th><span class="cr">OOP</span></th>
+						<th>Procedural</th>
+						<th>Data-Oriented</th>
+						<th><span class="cg">Functional</span></th>
+					</tr>
+					<tr>
+						<td style="color:var(--text-b); font-weight:600;">Primary unit</td>
+						<td>Object (data + behavior)</td>
+						<td>Function + struct</td>
+						<td>Data layout + transformation</td>
+						<td>Pure function + immutable value</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-b); font-weight:600;">Extension model</td>
+						<td>Inheritance</td>
+						<td>Composition, function pointers</td>
+						<td>New arrays, new passes</td>
+						<td>Higher-order functions, type classes</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-b); font-weight:600;">State management</td>
+						<td>Mutable, hidden behind methods</td>
+						<td>Mutable, explicitly passed</td>
+						<td>Mutable arrays, batch transforms</td>
+						<td>Immutable, new values returned</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-b); font-weight:600;">Testability</td>
+						<td>Requires mocking, DI</td>
+						<td>Function input → output</td>
+						<td>Array in → array out</td>
+						<td>Pure in → pure out</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-b); font-weight:600;">Cache behavior</td>
+						<td>Terrible (pointer chasing)</td>
+						<td>Depends on layout</td>
+						<td>Excellent (contiguous arrays)</td>
+						<td>Depends (allocation heavy)</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-b); font-weight:600;">Best for</td>
+						<td>GUI frameworks, simulation</td>
+						<td>Servers, CLI tools, libraries</td>
+						<td>Games, HPC, data processing</td>
+						<td>Compilers, parsers, pipelines</td>
+					</tr>
+					<tr>
+						<td style="color:var(--text-b); font-weight:600;">Exemplar languages</td>
+						<td>Java, C#, PHP</td>
+						<td>Go, C, Zig</td>
+						<td>C (manual), Zig, Odin</td>
+						<td>Haskell, Elixir, OCaml</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Why Go hits the sweet spot for server-side work</h2>
+
+			<p>Most server-side code is: receive request → validate → query database → transform → respond. This is inherently
+				procedural. Go matches this mental model perfectly because it gives you structs (data), functions
+				(transformations), interfaces (polymorphism where you actually need it), and goroutines (concurrency). Nothing
+				else. No inheritance, no generics-heavy abstractions (generics exist but are deliberately constrained), no
+				framework-level magic.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">What server code actually needs vs. what OOP provides</div>
+				<div class="tbl-wrap" style="margin:0;">
+					<table>
+						<tr>
+							<th>Need</th>
+							<th>OOP solution</th>
+							<th>Go solution</th>
+						</tr>
+						<tr>
+							<td>Group related data</td>
+							<td>Class with private fields + getters</td>
+							<td>Struct with exported fields</td>
+						</tr>
+						<tr>
+							<td>Share a contract</td>
+							<td>Interface + <code>implements</code></td>
+							<td>Interface (implicit)</td>
+						</tr>
+						<tr>
+							<td>Reuse logic</td>
+							<td>Inheritance or abstract class</td>
+							<td>Plain function or embedding</td>
+						</tr>
+						<tr>
+							<td>Handle errors</td>
+							<td>Exceptions (hidden control flow)</td>
+							<td>Return values (explicit)</td>
+						</tr>
+						<tr>
+							<td>Concurrency</td>
+							<td>Thread pools, synchronized blocks</td>
+							<td>Goroutines + channels</td>
+						</tr>
+						<tr>
+							<td>Dependency management</td>
+							<td>DI container (Spring, etc.)</td>
+							<td>Pass it as a function argument</td>
+						</tr>
+					</table>
+				</div>
+			</div>
+
+			<p>Go's "dependency injection" is: pass the database connection to the function that needs it. No container, no
+				annotations, no XML configuration, no reflection. The call graph is visible in the code.</p>
+		</div>
+
+		<div class="section">
+			<h2>Why Zig / C hit the sweet spot for systems work</h2>
+
+			<p>Systems code (game engines, databases, embedded, OS kernels) has a different constraint: you need to control
+				memory layout precisely because performance depends on cache behavior. OOP's per-object heap allocation is
+				fundamentally incompatible with this requirement.</p>
+
+			<p>Zig and C give you:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Feature</th>
+						<th>Why it matters for systems</th>
+					</tr>
+					<tr>
+						<td>Value-type structs</td>
+						<td>Data lives where you put it — stack, array, embedded in another struct. No hidden pointers.</td>
+					</tr>
+					<tr>
+						<td>No hidden allocation</td>
+						<td>Every allocation is explicit. You choose the allocator. You know the lifetime.</td>
+					</tr>
+					<tr>
+						<td>SoA layout</td>
+						<td>You can arrange data in Structure-of-Arrays for cache-optimal iteration. OOP forces AoS
+							(Array-of-Structures).
+						</td>
+					</tr>
+					<tr>
+						<td>Comptime (Zig)</td>
+						<td>Generate specialized code at compile time without runtime polymorphism.</td>
+					</tr>
+					<tr>
+						<td>No runtime</td>
+						<td>No GC, no vtables, no RTTI. What you write is what runs.</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>When OOP is actually appropriate</h2>
+
+			<p>OOP isn't wrong everywhere. It's wrong as a <em>default</em>. There are domains where object identity and
+				message-passing are the natural model:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Domain</th>
+						<th>Why OOP fits</th>
+						<th>Caveat</th>
+					</tr>
+					<tr>
+						<td>GUI frameworks</td>
+						<td>Widgets genuinely are objects with identity, state, and event handling</td>
+						<td>Even here, React's functional model is winning over class components</td>
+					</tr>
+					<tr>
+						<td>Simulation / agent systems</td>
+						<td>Independent agents with internal state and behavior</td>
+						<td>ECS (data-oriented) outperforms OOP here in practice</td>
+					</tr>
+					<tr>
+						<td>Protocol implementations</td>
+						<td>State machines with well-defined transitions</td>
+						<td>Sum types / tagged unions are usually cleaner</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>The root issue:</strong> Java, C#, and PHP taught an entire generation that <em>everything</em> is a
+				class. A file is a class. A utility function must live in a class. A namespace is a class. This "everything is
+				an object" dogma — not classes themselves — is what broke software engineering for 20 years. The fix isn't
+				"better OOP." It's using the right tool for the job: structs for data, functions for transformations, interfaces
+				for contracts, composition for reuse.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The decision framework</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">Choosing a paradigm for your next project</div>
+
+				<div style="font-family:var(--mono); font-size:12px; line-height:2.2; padding: 8px 0;">
+					<div><span class="cb">Web server / API / CRUD?</span> <span style="color:var(--text-xdim);">→</span> <span
+						class="cg">Procedural (Go, plain C#, plain Python)</span></div>
+					<div><span class="cb">Game engine / real-time simulation?</span> <span
+						style="color:var(--text-xdim);">→</span> <span class="cg">Data-Oriented (C, Zig, Odin + ECS)</span></div>
+					<div><span class="cb">Compiler / parser / data pipeline?</span> <span style="color:var(--text-xdim);">→</span>
+						<span class="cg">Functional (OCaml, Haskell, Elixir)</span></div>
+					<div><span class="cb">GUI with stateful widgets?</span> <span style="color:var(--text-xdim);">→</span> <span
+						class="cy">OOP is defensible here (but consider React/SwiftUI)</span></div>
+					<div><span class="cb">Embedded / kernel / driver?</span> <span style="color:var(--text-xdim);">→</span> <span
+						class="cg">C or Zig (no runtime, full control)</span></div>
+					<div><span class="cb">Enterprise CRUD in a Java/C# shop?</span> <span style="color:var(--text-xdim);">→</span>
+						<span
+							class="cy">Use the language, but minimize class hierarchies. Prefer composition. Keep it boring.</span>
+					</div>
+				</div>
+			</div>
+
+			<p>The worst outcome is "our entire codebase is a class hierarchy because that's what we learned in school." The
+				best outcome is choosing the paradigm that matches the problem, and being willing to use different paradigms in
+				different parts of the same system.</p>
+		</div>
+
+	</div>
+
+</div>
+
+<script>
+	// Tab switching
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
