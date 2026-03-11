@@ -1,0 +1,1696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Observer Pattern — From First Principles</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+          /* Domain colors: subject=teal, observer=amber, event=rose, channel=blue */
+          --subj: #2dd4bf;
+          --subj-bg: rgba(45, 212, 191, 0.08);
+          --obs: #f59e0b;
+          --obs-bg: rgba(245, 158, 11, 0.08);
+          --evt: #f06565;
+          --evt-bg: rgba(240, 101, 101, 0.08);
+          --ch: #3d9be8;
+          --ch-bg: rgba(61, 155, 232, 0.08);
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+          --c0: #f06565;
+          --c1: #e8b834;
+          --c2: #4dc462;
+          --c3: #3d9be8;
+      }
+
+      * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+      }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      .page {
+          max-width: 820px;
+          margin: 0 auto;
+          padding: 48px 24px 100px;
+      }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      /* ── Tabs ── */
+      .tab-bar {
+          display: flex;
+          gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+      }
+
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+
+      .tab-btn:hover {
+          color: var(--text);
+          background: var(--surface2);
+      }
+
+      .tab-btn.active {
+          color: #fff;
+          background: var(--accent);
+      }
+
+      .tab-panel {
+          display: none;
+      }
+
+      .tab-panel.active {
+          display: block;
+          animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn {
+          from {
+              opacity: 0;
+              transform: translateY(6px);
+          }
+          to {
+              opacity: 1;
+              transform: translateY(0);
+          }
+      }
+
+      /* ── Prose ── */
+      .section {
+          margin-bottom: 40px;
+      }
+
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .section p {
+          margin-bottom: 14px;
+      }
+
+      .section p:last-child {
+          margin-bottom: 0;
+      }
+
+      strong {
+          color: var(--text-b);
+          font-weight: 600;
+      }
+
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      /* ── Diagrams ── */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* ── Code block ── */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+          white-space: pre;
+      }
+
+      .codeblock .kw {
+          color: var(--accent2);
+      }
+
+      .codeblock .cm {
+          color: var(--text-dim);
+          font-style: italic;
+      }
+
+      .codeblock .fn {
+          color: #e599f7;
+      }
+
+      .codeblock .tp {
+          color: var(--subj);
+      }
+
+      .codeblock .str {
+          color: var(--c2);
+      }
+
+      .codeblock .num {
+          color: var(--c1);
+      }
+
+      .codeblock .iface {
+          color: var(--obs);
+      }
+
+      /* ── Callout ── */
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+
+      .callout.green {
+          background: rgba(77, 196, 98, 0.06);
+          border-color: rgba(77, 196, 98, 0.14);
+      }
+
+      /* ── Table ── */
+      .tbl-wrap {
+          overflow-x: auto;
+          margin: 16px 0;
+      }
+
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+      }
+
+      tr:last-child td {
+          border-bottom: none;
+      }
+
+      /* ── Flow diagrams ── */
+      .flow {
+          display: flex;
+          align-items: center;
+          gap: 0;
+          padding: 8px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          min-width: 580px;
+      }
+
+      .flow-node {
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 10px 14px;
+          text-align: center;
+          background: var(--bg);
+          flex-shrink: 0;
+      }
+
+      .flow-node .fn-label {
+          font-size: 9px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 4px;
+      }
+
+      .flow-node .fn-value {
+          font-size: 14px;
+          font-weight: 600;
+      }
+
+      .flow-arrow {
+          font-size: 14px;
+          color: var(--text-xdim);
+          padding: 0 8px;
+          flex-shrink: 0;
+      }
+
+      .flow-arrow-label {
+          font-size: 9px;
+          color: var(--text-dim);
+          text-align: center;
+      }
+
+      .flow-arrow-wrap {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 0 6px;
+          flex-shrink: 0;
+      }
+
+      /* ── Dependency diagrams ── */
+      .dep-grid {
+          display: flex;
+          gap: 24px;
+          align-items: flex-start;
+          min-width: 540px;
+      }
+
+      .dep-col {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          align-items: center;
+      }
+
+      .dep-box {
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 10px 18px;
+          text-align: center;
+          background: var(--bg);
+          font-family: var(--mono);
+          font-size: 12px;
+      }
+
+      .dep-box .db-name {
+          font-weight: 600;
+          font-size: 13px;
+      }
+
+      .dep-box .db-sub {
+          font-size: 9px;
+          color: var(--text-dim);
+          margin-top: 2px;
+      }
+
+      .dep-line {
+          width: 40px;
+          height: 1px;
+          background: var(--border);
+          position: relative;
+          align-self: center;
+      }
+
+      .dep-line::after {
+          content: '→';
+          position: absolute;
+          right: -6px;
+          top: -9px;
+          color: var(--text-xdim);
+          font-size: 14px;
+      }
+
+      /* ── Entity cards ── */
+      .entity-row {
+          display: flex;
+          gap: 12px;
+          margin: 16px 0;
+          flex-wrap: wrap;
+      }
+
+      .entity-card {
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 14px 18px;
+          flex: 1;
+          min-width: 200px;
+      }
+
+      .entity-card .ec-title {
+          font-family: var(--mono);
+          font-size: 12px;
+          font-weight: 700;
+          margin-bottom: 8px;
+      }
+
+      .entity-card .ec-body {
+          font-family: var(--mono);
+          font-size: 11px;
+          line-height: 1.7;
+          color: var(--text-dim);
+      }
+
+      .entity-card .ec-body span {
+          color: var(--text);
+      }
+
+      /* ── Sequence rows ── */
+      .seq-wrap {
+          min-width: 580px;
+      }
+
+      .seq-header {
+          display: flex;
+          padding-bottom: 10px;
+          border-bottom: 1px solid var(--border);
+          margin-bottom: 8px;
+      }
+
+      .seq-col-label {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          text-align: center;
+      }
+
+      .seq-row {
+          display: flex;
+          align-items: center;
+          padding: 6px 0;
+      }
+
+      .seq-cell {
+          font-family: var(--mono);
+          font-size: 11px;
+          text-align: center;
+      }
+
+      .seq-msg {
+          height: 1px;
+          flex: 1;
+          position: relative;
+      }
+
+      .seq-msg-line {
+          position: absolute;
+          top: 0;
+          height: 1px;
+          background: var(--border-hi);
+      }
+
+      .seq-msg-label {
+          font-family: var(--mono);
+          font-size: 10px;
+          color: var(--text-dim);
+          position: absolute;
+          top: -16px;
+          white-space: nowrap;
+      }
+
+      .seq-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          flex-shrink: 0;
+      }
+
+      .seq-lifeline {
+          width: 1px;
+          height: 28px;
+          flex-shrink: 0;
+      }
+
+      /* ── Inline colored labels ── */
+      .cs {
+          color: var(--subj);
+      }
+
+      .co {
+          color: var(--obs);
+      }
+
+      .ce {
+          color: var(--evt);
+      }
+
+      .cc {
+          color: var(--ch);
+      }
+
+      .cp {
+          color: var(--accent2);
+      }
+
+      .scroll-hint {
+          min-width: 580px;
+      }
+
+      @media (max-width: 640px) {
+          .tab-btn {
+              font-size: 10px;
+              padding: 7px 10px;
+          }
+
+          .entity-card {
+              min-width: 100%;
+          }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<div class="page-header">
+		<h1>the observer pattern from first principles</h1>
+		<div class="sub">GoF behavioral · publish-subscribe core · Go idioms · bridge to event systems</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="problem">The Problem</button>
+		<button class="tab-btn" data-tab="contract">The Contract</button>
+		<button class="tab-btn" data-tab="walked">Walked Example</button>
+		<button class="tab-btn" data-tab="variants">Push vs Pull vs Channel</button>
+		<button class="tab-btn" data-tab="edges">Edge Cases</button>
+		<button class="tab-btn" data-tab="event">Toward Event Systems</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE PROBLEM                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-problem">
+
+		<div class="section">
+			<h2>What coupling problem does this solve?</h2>
+
+			<p>You have a thing that changes — a price feed, a player's health, a config reload — and
+				multiple other things that need to react to that change. The naïve approach: the thing
+				that changes calls each reactor directly.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Direct coupling — the problem</div>
+				<div class="scroll-hint">
+					<div class="flow">
+						<div class="flow-node" style="border-color: var(--subj);">
+							<div class="fn-label" style="color: var(--subj);">source</div>
+							<div class="fn-value" style="color: var(--subj);">PriceFeed</div>
+						</div>
+						<div class="flow-arrow-wrap">
+							<div class="flow-arrow-label">calls</div>
+							<div class="flow-arrow">→</div>
+						</div>
+						<div class="flow-node">
+							<div class="fn-label" style="color: var(--obs);">reactor A</div>
+							<div class="fn-value" style="color: var(--obs);">Dashboard</div>
+						</div>
+					</div>
+					<div class="flow" style="padding-left: 0;">
+						<div class="flow-node" style="border-color: var(--subj); visibility:hidden;">
+							<div class="fn-label">source</div>
+							<div class="fn-value">PriceFeed</div>
+						</div>
+						<div class="flow-arrow-wrap">
+							<div class="flow-arrow-label">calls</div>
+							<div class="flow-arrow">→</div>
+						</div>
+						<div class="flow-node">
+							<div class="fn-label" style="color: var(--c0);">reactor B</div>
+							<div class="fn-value" style="color: var(--c0);">AlertEngine</div>
+						</div>
+					</div>
+					<div class="flow" style="padding-left: 0;">
+						<div class="flow-node" style="border-color: var(--subj); visibility:hidden;">
+							<div class="fn-label">source</div>
+							<div class="fn-value">PriceFeed</div>
+						</div>
+						<div class="flow-arrow-wrap">
+							<div class="flow-arrow-label">calls</div>
+							<div class="flow-arrow">→</div>
+						</div>
+						<div class="flow-node">
+							<div class="fn-label" style="color: var(--ch);">reactor C</div>
+							<div class="fn-value" style="color: var(--ch);">Logger</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					PriceFeed must <code>import</code> Dashboard, AlertEngine, and Logger. It knows
+					about all of them. Adding a fourth reactor means editing PriceFeed's source.
+				</div>
+			</div>
+
+			<p>This creates three problems. First, <strong>the source depends on every reactor</strong> — it must import their
+				packages, know their method signatures, and be recompiled when any of them changes. Second, <strong>new reactors
+					require source modification</strong> — you can't add a "write to Kafka" reactor without touching PriceFeed.
+				Third, <strong>the reactors can't be swapped at runtime</strong> — the call graph is baked in at compile time.
+			</p>
+
+			<p>In a game engine, this is the exact same problem: a <code>HealthComponent</code> changes and the UI, sound
+				system, achievement tracker, and death logic all need to know — but HealthComponent shouldn't import any of
+				them.</p>
+		</div>
+
+		<div class="section">
+			<h2>The inversion</h2>
+
+			<p>The Observer pattern inverts the dependency. Instead of the source calling each reactor, <strong>reactors
+				register themselves with the source</strong>, and the source calls them through an agreed-upon interface. The
+				source never learns their concrete types.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Observer pattern — dependency inversion</div>
+				<div class="scroll-hint">
+					<div
+						style="display:flex; align-items:center; gap: 16px; font-family:var(--mono); font-size:12px; flex-wrap: wrap; justify-content: center;">
+						<div class="flow-node" style="border-color: var(--obs); min-width: 100px;">
+							<div class="fn-label" style="color: var(--obs);">observer A</div>
+							<div class="fn-value" style="color: var(--obs);">Dashboard</div>
+						</div>
+						<div style="display:flex; flex-direction: column; align-items: center; gap: 4px;">
+							<div style="font-size:10px; color:var(--text-dim);">Subscribe()</div>
+							<div style="color:var(--text-xdim);">→</div>
+						</div>
+						<div class="flow-node" style="border-color: var(--subj); min-width: 140px;">
+							<div class="fn-label" style="color: var(--subj);">subject</div>
+							<div class="fn-value" style="color: var(--subj);">PriceFeed</div>
+							<div style="font-size:9px; color:var(--text-dim); margin-top:4px;">holds []Observer</div>
+						</div>
+						<div style="display:flex; flex-direction: column; align-items: center; gap: 4px;">
+							<div style="font-size:10px; color:var(--text-dim);">Subscribe()</div>
+							<div style="color:var(--text-xdim);">←</div>
+						</div>
+						<div class="flow-node" style="border-color: var(--c0); min-width: 100px;">
+							<div class="fn-label" style="color: var(--c0);">observer B</div>
+							<div class="fn-value" style="color: var(--c0);">AlertEngine</div>
+						</div>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					PriceFeed depends only on the <code>Observer</code> <em>interface</em>, not on
+					Dashboard or AlertEngine. The arrows of dependency now point toward an abstraction.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The tradeoff</h2>
+
+			<p>You get loose coupling and runtime flexibility. You pay with <strong>indirection</strong> — when reading
+				PriceFeed's code, you can't immediately see who receives its notifications. You also pay with <strong>lifecycle
+					complexity</strong> — observers must unsubscribe or you get goroutine leaks / stale references. And
+				notification order is typically undefined, so observers must not depend on being called before or after each
+				other.</p>
+
+			<div class="callout">
+				<strong>The core contract:</strong> "I don't know who you are, and I don't care how many of you there are. If
+				you implement this interface, I'll call you when something changes. You're responsible for subscribing and
+				unsubscribing."
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE CONTRACT                               -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-contract">
+
+		<div class="section">
+			<h2>Three roles, two interfaces</h2>
+
+			<p>Every Observer implementation has three participants. The <strong class="cs">Subject</strong> (also called
+				Publisher or Observable) is the thing that changes. The <strong class="co">Observer</strong> (also called
+				Subscriber or Listener) is the thing that reacts. The <strong class="ce">Event</strong> (also called
+				Notification or Message) is the data that flows from subject to observer.</p>
+
+			<div class="entity-row">
+				<div class="entity-card" style="border-color: rgba(45, 212, 191, 0.25);">
+					<div class="ec-title" style="color: var(--subj);">Subject</div>
+					<div class="ec-body">
+						<span>Subscribe(Observer)</span><br>
+						<span>Unsubscribe(Observer)</span><br>
+						<span>Notify(Event)</span><br>
+						<br>
+						Holds: <span>[]Observer</span>
+					</div>
+				</div>
+				<div class="entity-card" style="border-color: rgba(245, 158, 11, 0.25);">
+					<div class="ec-title" style="color: var(--obs);">Observer</div>
+					<div class="ec-body">
+						<span>OnNotify(Event)</span><br>
+						<br>
+						The single method that the<br>
+						subject calls. That's it.
+					</div>
+				</div>
+				<div class="entity-card" style="border-color: rgba(240, 101, 101, 0.25);">
+					<div class="ec-title" style="color: var(--evt);">Event</div>
+					<div class="ec-body">
+						<span>Type</span> (what happened)<br>
+						<span>Data</span> (relevant payload)<br>
+						<br>
+						A value type. No behavior.
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>In Go: interfaces and a struct</h2>
+
+			<p>Go's implicit interface satisfaction is a natural fit. An observer doesn't "extend" a base class — it just has
+				the right method signature. Here's the minimal contract:</p>
+
+			<div class="codeblock"><span class="cm">// Event is the payload carried from subject to observers.</span>
+				<span class="kw">type</span> <span class="tp">Event</span> <span class="kw">struct</span> {
+				Type <span class="kw">string</span> <span class="cm">// e.g. "price_updated", "health_changed"</span>
+				Data <span class="kw">any</span> <span class="cm">// the payload — observers type-assert as needed</span>
+				}
+
+				<span class="cm">// Observer is anything that can receive a notification.</span>
+				<span class="kw">type</span> <span class="iface">Observer</span> <span class="kw">interface</span> {
+				<span class="fn">OnNotify</span>(event Event)
+				}
+
+				<span class="cm">// Subject is anything that tracks observers and notifies them.</span>
+				<span class="kw">type</span> <span class="iface">Subject</span> <span class="kw">interface</span> {
+				<span class="fn">Subscribe</span>(obs Observer)
+				<span class="fn">Unsubscribe</span>(obs Observer)
+				<span class="fn">Notify</span>(event Event)
+				}
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Why <code>any</code> for the event data?</h2>
+
+			<p>The subject doesn't know what its observers need to do with the data. A dashboard needs a price float, an alert
+				engine needs a threshold struct, a logger needs a string representation. Using <code>any</code> (Go 1.18+ alias
+				for <code>interface{}</code>) lets the event carry domain-specific data without the contract itself importing
+				domain types.</p>
+
+			<p>The cost: observers must type-assert. The benefit: the Observer interface stays stable as the system grows. In
+				a typed event system (the end-goal), you'd replace this with generics — but at the pattern level,
+				<code>any</code> is the right starting point.</p>
+
+			<div class="callout">
+				<strong>Why not generics here?</strong> A <code>Subject[T]</code> can only notify observers of type <code>Observer[T]</code>.
+				If a subject emits multiple event types (common in game engines), you'd need a subject per type or fall back to
+				<code>any</code> anyway. Generics shine in the typed event bus layer — we'll get there in the last tab.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The subscribe/unsubscribe contract</h2>
+
+			<p><code>Subscribe</code> appends to the observer slice. <code>Unsubscribe</code> removes from it. Two design
+				decisions to lock down early:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Decision</th>
+						<th>Choice</th>
+						<th>Rationale</th>
+					</tr>
+					<tr>
+						<td>Identity</td>
+						<td>Pointer equality</td>
+						<td>Go interfaces are comparable if their underlying types are. For unsubscribe, we compare the interface
+							value directly — this works because observers are typically pointer receivers (<code>*Dashboard</code>),
+							and two pointers to the same struct are equal.
+						</td>
+					</tr>
+					<tr>
+						<td>Duplicates</td>
+						<td>Prevent</td>
+						<td>Subscribing the same observer twice means it gets notified twice. Almost never what you want.
+							Check-before-append is cheap for the typical observer count (single digits to low hundreds).
+						</td>
+					</tr>
+					<tr>
+						<td>Thread safety</td>
+						<td><code>sync.RWMutex</code></td>
+						<td>Notifications (read-path) are frequent; subscribe/unsubscribe (write-path) are rare. RWMutex lets
+							multiple goroutines notify concurrently while serializing subscription changes.
+						</td>
+					</tr>
+					<tr>
+						<td>Notify during unsubscribe</td>
+						<td>Snapshot the slice</td>
+						<td>Copy the observer slice under lock before iterating. Observers can safely unsubscribe from within <code>OnNotify</code>
+							without corrupting the iteration. Covered in detail in the Edge Cases tab.
+						</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: WALKED EXAMPLE                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-walked">
+
+		<div class="section">
+			<h2>Domain: stock price feed</h2>
+
+			<p>A <span class="cs">PriceFeed</span> receives new prices and notifies subscribers. Two observers: a <span
+				class="co">Display</span> that prints the price, and an <span class="ce">AlertEngine</span> that fires when the
+				price exceeds a threshold. Real values, real code.</p>
+		</div>
+
+		<div class="section">
+			<h2>The subject: BaseSubject</h2>
+
+			<p>We implement the subscription machinery once in a reusable struct that any domain subject can embed:</p>
+
+			<div class="codeblock"><span class="kw">type</span> <span class="tp">BaseSubject</span> <span
+				class="kw">struct</span> {
+				mu sync.RWMutex
+				observers []Observer
+				}
+
+				<span class="kw">func</span> (s *<span class="tp">BaseSubject</span>) <span class="fn">Subscribe</span>(obs
+				Observer) {
+				s.mu.Lock()
+				<span class="kw">defer</span> s.mu.Unlock()
+				<span class="cm">// Prevent duplicate subscriptions</span>
+				<span class="kw">for</span> _, existing := <span class="kw">range</span> s.observers {
+				<span class="kw">if</span> existing == obs {
+				<span class="kw">return</span>
+				}
+				}
+				s.observers = <span class="fn">append</span>(s.observers, obs)
+				}
+
+				<span class="kw">func</span> (s *<span class="tp">BaseSubject</span>) <span class="fn">Unsubscribe</span>(obs
+				Observer) {
+				s.mu.Lock()
+				<span class="kw">defer</span> s.mu.Unlock()
+				<span class="kw">for</span> i, existing := <span class="kw">range</span> s.observers {
+				<span class="kw">if</span> existing == obs {
+				<span class="cm">// Swap with last, truncate — O(1), no allocation</span>
+				s.observers[i] = s.observers[<span class="fn">len</span>(s.observers)-<span class="num">1</span>]
+				s.observers[<span class="fn">len</span>(s.observers)-<span class="num">1</span>] = <span class="kw">nil</span>
+				<span class="cm">// avoid memory leak</span>
+				s.observers = s.observers[:<span class="fn">len</span>(s.observers)-<span class="num">1</span>]
+				<span class="kw">return</span>
+				}
+				}
+				}
+
+				<span class="kw">func</span> (s *<span class="tp">BaseSubject</span>) <span class="fn">Notify</span>(event
+				Event) {
+				s.mu.RLock()
+				<span class="cm">// Snapshot: copy the slice header so iteration is safe</span>
+				<span class="cm">// even if an observer calls Unsubscribe during OnNotify</span>
+				snapshot := <span class="fn">make</span>([]Observer, <span class="fn">len</span>(s.observers))
+				<span class="fn">copy</span>(snapshot, s.observers)
+				s.mu.RUnlock()
+
+				<span class="kw">for</span> _, obs := <span class="kw">range</span> snapshot {
+				obs.<span class="fn">OnNotify</span>(event)
+				}
+				}
+			</div>
+
+			<div class="callout">
+				<strong>Why swap-remove in Unsubscribe?</strong> The standard "shift left" removal (<code>append(s[:i],
+				s[i+1:]...)</code>) is O(n) and allocates. Swap-with-last is O(1). Observer notification order is undefined
+				anyway, so preserving insertion order has no semantic value.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The domain subject: PriceFeed</h2>
+
+			<p>PriceFeed embeds BaseSubject and adds domain logic. Embedding promotes all three methods
+				(<code>Subscribe</code>, <code>Unsubscribe</code>, <code>Notify</code>) to PriceFeed — it satisfies the <code>Subject</code>
+				interface with zero boilerplate:</p>
+
+			<div class="codeblock"><span class="kw">type</span> <span class="tp">PriceUpdate</span> <span
+				class="kw">struct</span> {
+				Symbol <span class="kw">string</span>
+				Price <span class="kw">float64</span>
+				}
+
+				<span class="kw">type</span> <span class="tp">PriceFeed</span> <span class="kw">struct</span> {
+				<span class="tp">BaseSubject</span> <span class="cm">// embed — PriceFeed IS-A Subject</span>
+				}
+
+				<span class="kw">func</span> (pf *<span class="tp">PriceFeed</span>) <span class="fn">UpdatePrice</span>(symbol
+				<span class="kw">string</span>, price <span class="kw">float64</span>) {
+				<span class="cm">// Domain logic first (validation, storage, etc.)</span>
+				<span class="cm">// Then notify all observers</span>
+				pf.<span class="fn">Notify</span>(Event{
+				Type: <span class="str">"price_updated"</span>,
+				Data: PriceUpdate{Symbol: symbol, Price: price},
+				})
+				}
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Notification flow for UpdatePrice("AAPL", 187.50)</div>
+				<div class="scroll-hint">
+					<div style="display:flex; flex-direction:column; gap:6px; font-family:var(--mono); font-size:11px;">
+						<div style="display:flex; align-items:center; gap:10px;">
+							<div style="width:140px; text-align:right; color:var(--text-dim); flex-shrink:0;">caller</div>
+							<div style="padding:6px 12px; border-radius:4px; background:var(--surface2); color:var(--text);">
+								pf.UpdatePrice(<span class="str">"AAPL"</span>, <span class="num">187.50</span>)
+							</div>
+						</div>
+						<div style="display:flex; align-items:center; gap:10px;">
+							<div style="width:140px; text-align:right; color:var(--subj); flex-shrink:0;">PriceFeed</div>
+							<div style="color:var(--text-xdim);">↓</div>
+							<div style="padding:6px 12px; border-radius:4px; background:var(--subj-bg); color:var(--subj);">
+								pf.Notify(Event{Type: "price_updated", Data: PriceUpdate{...}})
+							</div>
+						</div>
+						<div style="display:flex; align-items:center; gap:10px;">
+							<div style="width:140px; text-align:right; color:var(--subj); flex-shrink:0;">BaseSubject</div>
+							<div style="color:var(--text-xdim);">↓</div>
+							<div style="padding:6px 12px; border-radius:4px; background:var(--surface2); color:var(--text-dim);">
+								snapshot observers, iterate
+							</div>
+						</div>
+						<div style="display:flex; align-items:center; gap:10px;">
+							<div style="width:140px; text-align:right; color:var(--obs); flex-shrink:0;">observer[0]</div>
+							<div style="color:var(--text-xdim);">↓</div>
+							<div style="padding:6px 12px; border-radius:4px; background:var(--obs-bg); color:var(--obs);">
+								display.OnNotify(event)
+							</div>
+						</div>
+						<div style="display:flex; align-items:center; gap:10px;">
+							<div style="width:140px; text-align:right; color:var(--c0); flex-shrink:0;">observer[1]</div>
+							<div style="color:var(--text-xdim);">↓</div>
+							<div style="padding:6px 12px; border-radius:4px; background:var(--evt-bg); color:var(--c0);">
+								alert.OnNotify(event)
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					The entire call happens on the <strong>caller's goroutine</strong>. This is synchronous Observer. Notify
+					returns only after every observer's OnNotify has completed.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Two concrete observers</h2>
+
+			<div class="codeblock"><span class="kw">type</span> <span class="tp">Display</span> <span class="kw">struct</span>{}
+
+				<span class="kw">func</span> (d *<span class="tp">Display</span>) <span class="fn">OnNotify</span>(event Event)
+				{
+				<span class="kw">if</span> event.Type != <span class="str">"price_updated"</span> {
+				<span class="kw">return</span>
+				}
+				update := event.Data.(PriceUpdate)
+				fmt.<span class="fn">Printf</span>(<span class="str">"[DISPLAY] %s: $%.2f\n"</span>, update.Symbol,
+				update.Price)
+				}
+
+				<span class="kw">type</span> <span class="tp">AlertEngine</span> <span class="kw">struct</span> {
+				Threshold <span class="kw">float64</span>
+				}
+
+				<span class="kw">func</span> (a *<span class="tp">AlertEngine</span>) <span class="fn">OnNotify</span>(event
+				Event) {
+				<span class="kw">if</span> event.Type != <span class="str">"price_updated"</span> {
+				<span class="kw">return</span>
+				}
+				update := event.Data.(PriceUpdate)
+				<span class="kw">if</span> update.Price > a.Threshold {
+				fmt.<span class="fn">Printf</span>(<span class="str">"[ALERT] %s exceeded $%.2f! Current: $%.2f\n"</span>,
+				update.Symbol, a.Threshold, update.Price)
+				}
+				}
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Wiring it up</h2>
+
+			<div class="codeblock"><span class="kw">func</span> <span class="fn">main</span>() {
+				feed := &PriceFeed{}
+
+				display := &Display{}
+				alert := &AlertEngine{Threshold: <span class="num">185.00</span>}
+
+				feed.<span class="fn">Subscribe</span>(display)
+				feed.<span class="fn">Subscribe</span>(alert)
+
+				feed.<span class="fn">UpdatePrice</span>(<span class="str">"AAPL"</span>, <span class="num">182.30</span>) <span
+					class="cm">// Display prints, Alert silent</span>
+				feed.<span class="fn">UpdatePrice</span>(<span class="str">"AAPL"</span>, <span class="num">187.50</span>) <span
+					class="cm">// Display prints, Alert fires</span>
+
+				feed.<span class="fn">Unsubscribe</span>(alert)
+
+				feed.<span class="fn">UpdatePrice</span>(<span class="str">"AAPL"</span>, <span class="num">190.00</span>) <span
+					class="cm">// Display prints, Alert gone</span>
+				}
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Output</div>
+				<div style="font-family:var(--mono); font-size:12px; line-height:1.9; color:var(--text-dim);">
+					<span style="color:var(--obs);">[DISPLAY]</span> AAPL: $182.30<br>
+					<span style="color:var(--obs);">[DISPLAY]</span> AAPL: $187.50<br>
+					<span style="color:var(--c0);">[ALERT]</span> AAPL exceeded $185.00! Current: $187.50<br>
+					<span style="color:var(--obs);">[DISPLAY]</span> AAPL: $190.00
+				</div>
+			</div>
+
+			<div class="callout green">
+				<strong>Key observation:</strong> PriceFeed never imports Display or AlertEngine. It only knows the Observer
+				interface. You can add a KafkaWriter observer, a MetricsCollector observer, or a test mock — without touching
+				PriceFeed.
+			</div>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: PUSH VS PULL VS CHANNEL                    -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-variants">
+
+		<div class="section">
+			<h2>Three notification strategies</h2>
+
+			<p>The walked example used <strong>push</strong> — the subject sends the full event data to every observer. This
+				is one of three common strategies, each with different coupling and performance characteristics.</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Strategy</th>
+						<th>What's passed</th>
+						<th>Observer action</th>
+						<th>Coupling</th>
+						<th>Best when</th>
+					</tr>
+					<tr>
+						<td style="color:var(--subj); font-weight:600;">Push</td>
+						<td>Full event data</td>
+						<td>Use the data directly</td>
+						<td>Observer coupled to event struct</td>
+						<td>All observers need the same data; events are cheap to construct</td>
+					</tr>
+					<tr>
+						<td style="color:var(--obs); font-weight:600;">Pull</td>
+						<td>Signal only (or minimal hint)</td>
+						<td>Query the subject for what it needs</td>
+						<td>Observer coupled to subject's query API</td>
+						<td>Observers need different slices of the data; data is expensive to compute</td>
+					</tr>
+					<tr>
+						<td style="color:var(--ch); font-weight:600;">Channel</td>
+						<td>Event sent to a <code>chan</code></td>
+						<td>Reads from its own channel</td>
+						<td>Decoupled by the channel buffer</td>
+						<td>Async notification; observers run on their own goroutines</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Pull variant in Go</h2>
+
+			<p>The observer receives a reference to the subject instead of event data. It then queries exactly what it
+				needs:</p>
+
+			<div class="codeblock"><span class="cm">// Pull-style: observer gets the subject, not the data.</span>
+				<span class="kw">type</span> <span class="iface">PullObserver</span> <span class="kw">interface</span> {
+				<span class="fn">OnChange</span>(source <span class="kw">any</span>) <span
+					class="cm">// the subject itself</span>
+				}
+
+				<span class="cm">// The observer queries what it needs:</span>
+				<span class="kw">func</span> (d *<span class="tp">Display</span>) <span class="fn">OnChange</span>(source <span
+					class="kw">any</span>) {
+				feed := source.(*PriceFeed)
+				price := feed.<span class="fn">LatestPrice</span>(<span class="str">"AAPL"</span>) <span class="cm">// pull only what we need</span>
+				fmt.<span class="fn">Printf</span>(<span class="str">"[DISPLAY] AAPL: $%.2f\n"</span>, price)
+				}
+			</div>
+
+			<p><strong>Trade-off:</strong> the observer now depends on the subject's query API (<code>LatestPrice</code>),
+				which is tighter coupling than depending on an event struct. But it avoids sending data that most observers
+				don't need — useful when the subject holds a large, complex state and different observers need different slices
+				of it.</p>
+		</div>
+
+		<div class="section">
+			<h2>Channel variant in Go</h2>
+
+			<p>This is the most Go-idiomatic variant. Instead of implementing an interface, each "observer" is a goroutine
+				reading from a channel. The subject writes to all registered channels:</p>
+
+			<div class="codeblock"><span class="kw">type</span> <span class="tp">ChanSubject</span> <span
+				class="kw">struct</span> {
+				mu sync.RWMutex
+				subs <span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">chan</span> Event <span
+					class="cm">// keyed by subscriber ID</span>
+				}
+
+				<span class="kw">func</span> (s *<span class="tp">ChanSubject</span>) <span class="fn">Subscribe</span>(id <span
+					class="kw">string</span>, bufSize <span class="kw">int</span>) <span class="kw">chan</span> Event {
+				s.mu.Lock()
+				<span class="kw">defer</span> s.mu.Unlock()
+				ch := <span class="fn">make</span>(<span class="kw">chan</span> Event, bufSize)
+				s.subs[id] = ch
+				<span class="kw">return</span> ch
+				}
+
+				<span class="kw">func</span> (s *<span class="tp">ChanSubject</span>) <span class="fn">Unsubscribe</span>(id
+				<span class="kw">string</span>) {
+				s.mu.Lock()
+				<span class="kw">defer</span> s.mu.Unlock()
+				<span class="kw">if</span> ch, ok := s.subs[id]; ok {
+				<span class="fn">close</span>(ch) <span class="cm">// signals the reader goroutine to exit</span>
+				<span class="fn">delete</span>(s.subs, id)
+				}
+				}
+
+				<span class="kw">func</span> (s *<span class="tp">ChanSubject</span>) <span class="fn">Notify</span>(event
+				Event) {
+				s.mu.RLock()
+				<span class="kw">defer</span> s.mu.RUnlock()
+				<span class="kw">for</span> _, ch := <span class="kw">range</span> s.subs {
+				<span class="kw">select</span> {
+				<span class="kw">case</span> ch <- event:
+				<span class="kw">default</span>:
+				<span class="cm">// Buffer full — drop or log. Never block the publisher.</span>
+				}
+				}
+				}
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Channel observer — goroutine per subscriber</div>
+				<div class="scroll-hint">
+					<div style="display:flex; flex-direction:column; gap:6px; font-family:var(--mono); font-size:11px;">
+						<div style="display:flex; align-items:center; gap:10px;">
+							<div style="width:140px; text-align:right; color:var(--subj); flex-shrink:0;">Notify()</div>
+							<div style="padding:6px 12px; border-radius:4px; background:var(--subj-bg); color:var(--subj);">event →
+								ch_display (buffered)
+							</div>
+						</div>
+						<div style="display:flex; align-items:center; gap:10px;">
+							<div style="width:140px; text-align:right; flex-shrink:0;"></div>
+							<div style="padding:6px 12px; border-radius:4px; background:var(--evt-bg); color:var(--c0);">event →
+								ch_alert (buffered)
+							</div>
+						</div>
+						<div style="display:flex; align-items:center; gap:10px; margin-top:6px;">
+							<div style="width:140px; text-align:right; color:var(--obs); flex-shrink:0;">goroutine A</div>
+							<div style="color:var(--text-xdim);">←</div>
+							<div style="padding:6px 12px; border-radius:4px; background:var(--obs-bg); color:var(--obs);">for event :=
+								range ch_display { ... }
+							</div>
+						</div>
+						<div style="display:flex; align-items:center; gap:10px;">
+							<div style="width:140px; text-align:right; color:var(--c0); flex-shrink:0;">goroutine B</div>
+							<div style="color:var(--text-xdim);">←</div>
+							<div style="padding:6px 12px; border-radius:4px; background:var(--evt-bg); color:var(--c0);">for event :=
+								range ch_alert { ... }
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					Notify returns immediately after writing to all channel buffers. Each observer
+					processes events on its own goroutine at its own pace. <code>close(ch)</code> in
+					Unsubscribe causes <code>range ch</code> to exit cleanly — no goroutine leak.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>When to use which</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Use case</th>
+						<th>Best fit</th>
+						<th>Why</th>
+					</tr>
+					<tr>
+						<td>Game engine ECS events</td>
+						<td style="color:var(--subj);">Push (sync)</td>
+						<td>Tight frame budget; observers must complete before the frame advances. No allocation per event.</td>
+					</tr>
+					<tr>
+						<td>Config reload notification</td>
+						<td style="color:var(--obs);">Pull</td>
+						<td>Each service needs different config keys. Push the full config struct to everyone is wasteful.</td>
+					</tr>
+					<tr>
+						<td>Microservice event bus</td>
+						<td style="color:var(--ch);">Channel (async)</td>
+						<td>Publishers must not block. Subscribers process at their own rate. Backpressure via buffer size.</td>
+					</tr>
+					<tr>
+						<td>UI state binding</td>
+						<td style="color:var(--subj);">Push (sync)</td>
+						<td>State change → immediate re-render. Must be synchronous or you get flicker.</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>The channel variant is really pub/sub in disguise.</strong> Once you key subscribers by topic string
+				instead of just ID, and route events to matching channels, you've built the core of an event bus. That's the
+				bridge to your event system.
+			</div>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: EDGE CASES                                 -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-edges">
+
+		<div class="section">
+			<h2>Unsubscribe during notification</h2>
+
+			<p>An observer's <code>OnNotify</code> calls <code>Unsubscribe(self)</code>. If you're iterating over the same
+				slice you're modifying, you get either a skipped observer or a panic. This is the single most common Observer
+				pattern bug.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">The corrupted iteration problem</div>
+				<div style="font-family:var(--mono); font-size:11px; line-height:1.8; color:var(--text-dim);">
+					<div>observers = [<span style="color:var(--obs);">A</span>, <span style="color:var(--c0);">B</span>, <span
+						style="color:var(--ch);">C</span>]
+					</div>
+					<div style="margin-top:4px;">i=0: call <span style="color:var(--obs);">A</span>.OnNotify()</div>
+					<div style="padding-left:20px;">→ <span style="color:var(--obs);">A</span> calls Unsubscribe(<span
+						style="color:var(--obs);">A</span>)
+					</div>
+					<div style="padding-left:20px;">→ swap-remove: observers becomes [<span style="color:var(--ch);">C</span>,
+						<span style="color:var(--c0);">B</span>]
+					</div>
+					<div style="margin-top:4px;">i=1: call observers[1] = <span style="color:var(--c0);">B</span>.OnNotify() <span
+						style="color:var(--c2);">✓</span></div>
+					<div>i=2: out of bounds — <span style="color:var(--c0); font-weight:600;">len is now 2</span> <span
+						style="color:var(--c0);">✗ panic or skip C</span></div>
+				</div>
+			</div>
+
+			<p><strong>The fix</strong> is what our BaseSubject already does: snapshot the observer slice before iterating.
+				The snapshot is a separate slice header pointing to the same underlying array at the moment of copy. Even if the
+				original slice is modified during iteration, the snapshot remains consistent.</p>
+
+			<div class="codeblock"><span class="cm">// Safe: iterate over a snapshot</span>
+				snapshot := <span class="fn">make</span>([]Observer, <span class="fn">len</span>(s.observers))
+				<span class="fn">copy</span>(snapshot, s.observers)
+
+				<span class="kw">for</span> _, obs := <span class="kw">range</span> snapshot {
+				obs.<span class="fn">OnNotify</span>(event) <span
+					class="cm">// can call Unsubscribe — doesn't affect snapshot</span>
+				}
+			</div>
+
+			<p>Cost: one allocation per Notify call (<code>make</code> allocates a new slice). For hot paths (game loops), you
+				can pre-allocate a reusable snapshot buffer — but for most systems, this allocation is negligible.</p>
+		</div>
+
+		<div class="section">
+			<h2>Memory leaks: the dangling observer</h2>
+
+			<p>If an observer is subscribed to a subject and the observer goes out of scope <em>without unsubscribing</em>,
+				the subject's slice still holds a reference to it. The garbage collector can't reclaim it. This is Go's version
+				of the classic C++ dangling observer problem.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Leaked observer</div>
+				<div style="font-family:var(--mono); font-size:11px; line-height:1.8; color:var(--text-dim);">
+					<div><span style="color:var(--subj);">feed</span>.observers = [<span style="color:var(--obs);">display</span>,
+						<span style="color:var(--c0);">alert</span>]
+					</div>
+					<div style="margin-top:6px;">alert = <span style="color:var(--text-xdim);">nil</span> <span class="cm">// "drops" the reference</span>
+					</div>
+					<div style="margin-top:6px;"><span style="color:var(--warn);">But feed.observers[1] still points to the AlertEngine.</span>
+					</div>
+					<div><span style="color:var(--warn);">GC cannot free it. OnNotify keeps getting called.</span></div>
+				</div>
+			</div>
+
+			<p>Prevention patterns:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Pattern</th>
+						<th>Mechanism</th>
+						<th>Tradeoff</th>
+					</tr>
+					<tr>
+						<td>Explicit unsubscribe</td>
+						<td>Caller is responsible: <code>defer feed.Unsubscribe(alert)</code></td>
+						<td>Simple. Easy to forget.</td>
+					</tr>
+					<tr>
+						<td>Return a cancel func</td>
+						<td><code>cancel := feed.Subscribe(alert)</code> — call <code>cancel()</code> to remove</td>
+						<td>Familiar from <code>context.WithCancel</code>. Hard to accidentally hold a stale subscription.</td>
+					</tr>
+					<tr>
+						<td>Weak references</td>
+						<td>Not natively supported in Go. Possible with <code>runtime.SetFinalizer</code> but fragile.</td>
+						<td>Avoid. Go's GC doesn't guarantee finalizer timing.</td>
+					</tr>
+					<tr>
+						<td>Channel + close</td>
+						<td>Subject closes the channel → goroutine exits → GC cleans up</td>
+						<td>Natural in the channel variant. Doesn't apply to interface-based Observer.</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>The cancel func pattern</strong> is the strongest fit for Go because it mirrors how the standard library
+				handles cleanup: <code>ctx, cancel := context.WithCancel(parent)</code>. Your event system can use the same
+				idiom.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The cancel func variant</h2>
+
+			<div class="codeblock"><span class="kw">func</span> (s *<span class="tp">BaseSubject</span>) <span class="fn">Subscribe</span>(obs
+				Observer) <span class="kw">func</span>() {
+				s.mu.Lock()
+				<span class="kw">defer</span> s.mu.Unlock()
+				<span class="kw">for</span> _, existing := <span class="kw">range</span> s.observers {
+				<span class="kw">if</span> existing == obs {
+				<span class="kw">return</span> <span class="kw">func</span>() {} <span class="cm">// already subscribed — no-op cancel</span>
+				}
+				}
+				s.observers = <span class="fn">append</span>(s.observers, obs)
+
+				<span class="cm">// Return a cancel function that captures 'obs' in a closure</span>
+				<span class="kw">var</span> once sync.Once
+				<span class="kw">return</span> <span class="kw">func</span>() {
+				once.<span class="fn">Do</span>(<span class="kw">func</span>() { s.<span class="fn">Unsubscribe</span>(obs) })
+				}
+				}
+
+				<span class="cm">// Usage:</span>
+				cancel := feed.<span class="fn">Subscribe</span>(display)
+				<span class="kw">defer</span> cancel() <span class="cm">// guaranteed cleanup</span></div>
+
+			<p><code>sync.Once</code> makes the cancel function idempotent — calling it multiple times is safe.</p>
+		</div>
+
+		<div class="section">
+			<h2>Observer panics</h2>
+
+			<p>If one observer's <code>OnNotify</code> panics, the remaining observers in the iteration never get called. In
+				the synchronous variant, the panic propagates up to the caller of <code>Notify</code>.</p>
+
+			<div class="codeblock"><span class="cm">// Resilient notify: recover per observer</span>
+				<span class="kw">for</span> _, obs := <span class="kw">range</span> snapshot {
+				<span class="kw">func</span>() {
+				<span class="kw">defer func</span>() {
+				<span class="kw">if</span> r := <span class="fn">recover</span>(); r != <span class="kw">nil</span> {
+				log.<span class="fn">Printf</span>(<span class="str">"observer panic: %v"</span>, r)
+				}
+				}()
+				obs.<span class="fn">OnNotify</span>(event)
+				}()
+				}
+			</div>
+
+			<p>This wraps each observer call in a deferred recover. One bad observer can't take down the whole notification
+				chain. The cost is a closure allocation per observer per notify — acceptable in most systems, too expensive for
+				game-loop hot paths.</p>
+		</div>
+
+		<div class="section">
+			<h2>Ordering guarantees</h2>
+
+			<p>The Observer pattern intentionally provides <strong>no ordering guarantees</strong>. Our swap-remove in <code>Unsubscribe</code>
+				further breaks insertion order. If your system requires ordered notification, you have two clean options:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Option</th>
+						<th>Mechanism</th>
+						<th>When to use</th>
+					</tr>
+					<tr>
+						<td>Priority field</td>
+						<td>Store observers as <code>[]struct{ obs Observer; priority int }</code>, sort on subscribe</td>
+						<td>Small observer count, rare subscription changes</td>
+					</tr>
+					<tr>
+						<td>Ordered phases</td>
+						<td>Multiple subjects for different phases: <code>PreUpdate</code>, <code>Update</code>,
+							<code>PostUpdate</code></td>
+						<td>Game engine frame lifecycle — subscribe to the phase you need</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: TOWARD EVENT SYSTEMS                       -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-event">
+
+		<div class="section">
+			<h2>Observer → Event Bus: the generalization</h2>
+
+			<p>The Observer pattern as implemented above has a structural limitation: <strong>each subject manages its own
+				subscriber list</strong>. If you have 20 types of events, you need 20 subjects — or one subject where every
+				observer receives every event and filters internally.</p>
+
+			<p>An event bus (or event system) centralizes this. Instead of subscribing to a specific subject, observers
+				subscribe to <strong>event types</strong> on a shared bus. The bus routes events to the right subscribers.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Observer vs Event Bus — structural comparison</div>
+				<div class="scroll-hint">
+					<div style="display:flex; gap:40px; font-family:var(--mono); font-size:11px;">
+						<div>
+							<div
+								style="color:var(--text-dim); font-size:10px; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">
+								Observer Pattern
+							</div>
+							<div style="color:var(--subj);">SubjectA</div>
+							<div style="padding-left:16px; color:var(--text-dim);">├─ observer1</div>
+							<div style="padding-left:16px; color:var(--text-dim);">└─ observer2</div>
+							<div style="color:var(--subj); margin-top:6px;">SubjectB</div>
+							<div style="padding-left:16px; color:var(--text-dim);">├─ observer2</div>
+							<div style="padding-left:16px; color:var(--text-dim);">└─ observer3</div>
+							<div style="margin-top:10px; color:var(--text-xdim); font-size:10px;">N subjects × M observers<br>each
+								subject holds its own list
+							</div>
+						</div>
+						<div style="border-left:1px solid var(--border); padding-left:40px;">
+							<div
+								style="color:var(--text-dim); font-size:10px; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">
+								Event Bus
+							</div>
+							<div style="color:var(--ch);">EventBus</div>
+							<div style="padding-left:16px; color:var(--text-dim);">routes[<span style="color:var(--c0);">"price_updated"</span>]
+							</div>
+							<div style="padding-left:32px; color:var(--text-dim);">├─ handler1</div>
+							<div style="padding-left:32px; color:var(--text-dim);">└─ handler2</div>
+							<div style="padding-left:16px; color:var(--text-dim);">routes[<span style="color:var(--c2);">"order_filled"</span>]
+							</div>
+							<div style="padding-left:32px; color:var(--text-dim);">└─ handler3</div>
+							<div style="margin-top:10px; color:var(--text-xdim); font-size:10px;">One bus, topic-keyed routing<br>publishers
+								don't know subscribers exist
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Minimal event bus skeleton</h2>
+
+			<p>This is the bridge between the Observer pattern above and a full event system. It uses the same mechanics —
+				just centralized and keyed by event type:</p>
+
+			<div class="codeblock"><span class="kw">type</span> <span class="iface">Handler</span> <span
+				class="kw">func</span>(event Event)
+
+				<span class="kw">type</span> <span class="tp">EventBus</span> <span class="kw">struct</span> {
+				mu sync.RWMutex
+				handlers <span class="kw">map</span>[<span class="kw">string</span>][]Handler <span class="cm">// event type → handlers</span>
+				}
+
+				<span class="kw">func</span> <span class="fn">NewEventBus</span>() *<span class="tp">EventBus</span> {
+				<span class="kw">return</span> &EventBus{handlers: <span class="fn">make</span>(<span
+					class="kw">map</span>[<span class="kw">string</span>][]Handler)}
+				}
+
+				<span class="kw">func</span> (bus *<span class="tp">EventBus</span>) <span class="fn">On</span>(eventType <span
+					class="kw">string</span>, h Handler) <span class="kw">func</span>() {
+				bus.mu.Lock()
+				<span class="kw">defer</span> bus.mu.Unlock()
+				bus.handlers[eventType] = <span class="fn">append</span>(bus.handlers[eventType], h)
+
+				<span class="cm">// Return cancel func (same pattern as Observer)</span>
+				idx := <span class="fn">len</span>(bus.handlers[eventType]) - <span class="num">1</span>
+				<span class="kw">var</span> once sync.Once
+				<span class="kw">return</span> <span class="kw">func</span>() {
+				once.<span class="fn">Do</span>(<span class="kw">func</span>() { bus.<span class="fn">off</span>(eventType, idx)
+				})
+				}
+				}
+
+				<span class="kw">func</span> (bus *<span class="tp">EventBus</span>) <span class="fn">Emit</span>(event Event) {
+				bus.mu.RLock()
+				handlers := <span class="fn">make</span>([]Handler, <span class="fn">len</span>(bus.handlers[event.Type]))
+				<span class="fn">copy</span>(handlers, bus.handlers[event.Type])
+				bus.mu.RUnlock()
+
+				<span class="kw">for</span> _, h := <span class="kw">range</span> handlers {
+				h(event)
+				}
+				}
+			</div>
+
+			<div class="callout green">
+				<strong>Notice what changed:</strong> subscribers no longer implement an interface — they register plain
+				functions (<code>Handler</code>). The bus uses <code>On</code>/<code>Emit</code> vocabulary instead of <code>Subscribe</code>/<code>Notify</code>.
+				And publishers call <code>bus.Emit()</code> instead of <code>self.Notify()</code> — <em>the publisher doesn't
+				even hold the subscriber list anymore.</em>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Type-safe events with generics</h2>
+
+			<p>The <code>any</code> payload and string-keyed routing work but push type checking to runtime. With Go generics,
+				you can make the bus type-safe per event:</p>
+
+			<div class="codeblock"><span
+				class="cm">// A typed subscription: the handler receives the concrete type, not any.</span>
+				<span class="kw">func</span> <span class="fn">On</span>[T <span class="kw">any</span>](bus *<span class="tp">EventBus</span>,
+				eventType <span class="kw">string</span>, handler <span class="kw">func</span>(T)) <span class="kw">func</span>()
+				{
+				<span class="kw">return</span> bus.<span class="fn">On</span>(eventType, <span class="kw">func</span>(e Event) {
+				<span class="kw">if</span> data, ok := e.Data.(T); ok {
+				handler(data)
+				}
+				})
+				}
+
+				<span class="cm">// Usage: handler receives PriceUpdate directly, no type assertion needed.</span>
+				cancel := <span class="fn">On</span>[PriceUpdate](bus, <span class="str">"price_updated"</span>, <span
+					class="kw">func</span>(p PriceUpdate) {
+				fmt.<span class="fn">Printf</span>(<span class="str">"Price: $%.2f\n"</span>, p.Price)
+				})
+			</div>
+
+			<p>The type assertion is pushed into the <code>On</code> wrapper — each handler only sees its expected type. A
+				mismatched event silently skips (you could log or panic instead, depending on your error philosophy).</p>
+		</div>
+
+		<div class="section">
+			<h2>The full progression</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Layer</th>
+						<th>What it adds</th>
+						<th>Subscribers</th>
+						<th>Publishers know about</th>
+					</tr>
+					<tr>
+						<td style="color:var(--subj); font-weight:600;">Direct calls</td>
+						<td>Nothing</td>
+						<td>Hardcoded in source</td>
+						<td>Every concrete reactor</td>
+					</tr>
+					<tr>
+						<td style="color:var(--obs); font-weight:600;">Observer</td>
+						<td>Interface indirection</td>
+						<td>Register with the subject</td>
+						<td>The Observer interface only</td>
+					</tr>
+					<tr>
+						<td style="color:var(--ch); font-weight:600;">Event Bus</td>
+						<td>Centralized routing by topic</td>
+						<td>Register with the bus, not the publisher</td>
+						<td>The bus + event type string</td>
+					</tr>
+					<tr>
+						<td style="color:var(--accent2); font-weight:600;">Typed Event Bus</td>
+						<td>Generic type safety</td>
+						<td>Type-safe handler per event</td>
+						<td>The bus + event type string</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c2); font-weight:600;">Async Event Bus</td>
+						<td>Channel-based dispatch</td>
+						<td>Goroutine per subscriber</td>
+						<td>The bus only — fully decoupled</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Each layer adds one more degree of decoupling. Your event system can start at any layer and evolve upward as
+				the architecture demands it.</p>
+		</div>
+
+		<div class="section">
+			<h2>Connecting this to your event system</h2>
+
+			<p>The pieces you'll carry forward from the Observer pattern into a full event system:</p>
+
+			<div class="entity-row">
+				<div class="entity-card" style="border-color: rgba(124, 92, 224, 0.25);">
+					<div class="ec-title" style="color: var(--accent2);">Keep</div>
+					<div class="ec-body">
+						<span>Snapshot-before-iterate</span> — safe concurrent modification<br>
+						<span>Cancel func returns</span> — idempotent cleanup<br>
+						<span>RWMutex</span> — readers (notify) don't block each other<br>
+						<span>Swap-remove</span> — O(1) unsubscribe
+					</div>
+				</div>
+				<div class="entity-card" style="border-color: rgba(232, 136, 58, 0.25);">
+					<div class="ec-title" style="color: var(--warn);">Evolve</div>
+					<div class="ec-body">
+						<span>Observer interface → handler func</span><br>
+						<span>Subject.Notify → Bus.Emit</span><br>
+						<span>Subject-held list → bus-held map</span><br>
+						<span>any payload → generic T</span>
+					</div>
+				</div>
+			</div>
+
+			<div class="callout">
+				<strong>The Observer pattern is the engine. The event system is the car.</strong> Every event bus, message
+				broker, and reactive framework is a generalization of what you've seen here: a subscriber list, a notification
+				mechanism, and a contract between publisher and subscriber.
+			</div>
+		</div>
+	</div>
+
+</div>
+
+<script>
+	// Tab switching
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
