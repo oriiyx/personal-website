@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Game Engine Architecture — The Full Map</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+          /* Subsystem colors — consistent across all tabs */
+          --c-core: #f06565;
+          --c-mem: #e8b834;
+          --c-render: #4dc462;
+          --c-phys: #3d9be8;
+          --c-input: #c084fc;
+          --c-script: #e8883a;
+          --c-net: #5ce0d0;
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+      }
+
+      * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+      }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      .page {
+          max-width: 1080px;
+          margin: 0 auto;
+          padding: 48px 24px 100px;
+      }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      /* ── Tabs ── */
+      .tab-bar {
+          display: flex;
+          gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+      }
+
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 14px;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+
+      .tab-btn:hover {
+          color: var(--text);
+          background: var(--surface2);
+      }
+
+      .tab-btn.active {
+          color: #fff;
+          background: var(--accent);
+      }
+
+      .tab-panel {
+          display: none;
+      }
+
+      .tab-panel.active {
+          display: block;
+          animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn {
+          from {
+              opacity: 0;
+              transform: translateY(6px);
+          }
+          to {
+              opacity: 1;
+              transform: translateY(0);
+          }
+      }
+
+      /* ── Prose ── */
+      .section {
+          margin-bottom: 40px;
+      }
+
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .section p {
+          margin-bottom: 14px;
+      }
+
+      .section p:last-child {
+          margin-bottom: 0;
+      }
+
+      strong {
+          color: var(--text-b);
+          font-weight: 600;
+      }
+
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      /* ── Diagrams ── */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* ── Callout ── */
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+
+      .callout.green {
+          background: rgba(77, 196, 98, 0.06);
+          border-color: rgba(77, 196, 98, 0.14);
+      }
+
+      /* ── Table ── */
+      .tbl-wrap {
+          overflow-x: auto;
+          margin: 16px 0;
+      }
+
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+          vertical-align: top;
+      }
+
+      tr:last-child td {
+          border-bottom: none;
+      }
+
+      /* ── Code block ── */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+          white-space: pre;
+      }
+
+      .codeblock .kw {
+          color: var(--accent2);
+      }
+
+      .codeblock .cm {
+          color: var(--text-dim);
+          font-style: italic;
+      }
+
+      .codeblock .fn {
+          color: var(--c-render);
+      }
+
+      .codeblock .str {
+          color: var(--c-mem);
+      }
+
+      .codeblock .num {
+          color: var(--c-mem);
+      }
+
+      /* ── Pipeline / Flow Diagrams ── */
+      .flow {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+          padding: 8px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+      }
+
+      .flow-node {
+          padding: 8px 14px;
+          border-radius: 6px;
+          font-weight: 600;
+          font-size: 11px;
+          white-space: nowrap;
+      }
+
+      .flow-arrow {
+          color: var(--text-xdim);
+          font-size: 14px;
+          flex-shrink: 0;
+      }
+
+      /* ── Subsystem Cards ── */
+      .sys-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+          gap: 10px;
+          margin: 16px 0;
+      }
+
+      .sys-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 14px 16px;
+          transition: border-color 0.15s;
+      }
+
+      .sys-card:hover {
+          border-color: var(--border-hi);
+      }
+
+      .sys-card .sc-name {
+          font-family: var(--mono);
+          font-size: 12px;
+          font-weight: 700;
+          margin-bottom: 6px;
+      }
+
+      .sys-card .sc-desc {
+          font-family: var(--mono);
+          font-size: 10px;
+          color: var(--text-dim);
+          line-height: 1.5;
+      }
+
+      /* ── Tradeoff boxes ── */
+      .tradeoff {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin: 16px 0;
+      }
+
+      .tradeoff-side {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 14px 16px;
+      }
+
+      .tradeoff-side .ts-label {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 8px;
+      }
+
+      .tradeoff-side .ts-items {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          line-height: 1.8;
+      }
+
+      /* ── Deep dive list ── */
+      .deep-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin: 12px 0;
+      }
+
+      .deep-tag {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 500;
+          padding: 4px 10px;
+          border-radius: 4px;
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          color: var(--text-dim);
+          letter-spacing: 0.3px;
+      }
+
+      /* ── Color utility ── */
+      .c-core {
+          color: var(--c-core);
+      }
+
+      .c-mem {
+          color: var(--c-mem);
+      }
+
+      .c-render {
+          color: var(--c-render);
+      }
+
+      .c-phys {
+          color: var(--c-phys);
+      }
+
+      .c-input {
+          color: var(--c-input);
+      }
+
+      .c-script {
+          color: var(--c-script);
+      }
+
+      .c-net {
+          color: var(--c-net);
+      }
+
+      .bg-core {
+          background: rgba(240, 101, 101, 0.08);
+          border-color: rgba(240, 101, 101, 0.2) !important;
+      }
+
+      .bg-mem {
+          background: rgba(232, 184, 52, 0.08);
+          border-color: rgba(232, 184, 52, 0.2) !important;
+      }
+
+      .bg-render {
+          background: rgba(77, 196, 98, 0.08);
+          border-color: rgba(77, 196, 98, 0.2) !important;
+      }
+
+      .bg-phys {
+          background: rgba(61, 155, 232, 0.08);
+          border-color: rgba(61, 155, 232, 0.2) !important;
+      }
+
+      .bg-input {
+          background: rgba(192, 132, 252, 0.08);
+          border-color: rgba(192, 132, 252, 0.2) !important;
+      }
+
+      .bg-script {
+          background: rgba(232, 136, 58, 0.08);
+          border-color: rgba(232, 136, 58, 0.2) !important;
+      }
+
+      .bg-net {
+          background: rgba(92, 224, 208, 0.08);
+          border-color: rgba(92, 224, 208, 0.2) !important;
+      }
+
+      .scroll-hint {
+          min-width: 600px;
+      }
+
+      /* ── Architecture SVG ── */
+      .arch-svg {
+          width: 100%;
+          max-width: 780px;
+          margin: 0 auto;
+          display: block;
+      }
+
+      @media (max-width: 640px) {
+          .tab-btn {
+              font-size: 10px;
+              padding: 7px 10px;
+          }
+
+          .tradeoff {
+              grid-template-columns: 1fr;
+          }
+
+          .sys-grid {
+              grid-template-columns: 1fr;
+          }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<a class="back-link" href="/lab/"
+		 style="font-family:var(--mono);font-size:11px;color:var(--text-dim);text-decoration:none;display:inline-block;margin-bottom:24px;letter-spacing:0.3px;">←
+		back to lab</a>
+
+	<div class="page-header">
+		<h1>game engine architecture</h1>
+		<div class="sub">the full map · every subsystem from frame loop to netcode · for developers building their first
+			engine
+		</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="core">The Core Loop</button>
+		<button class="tab-btn" data-tab="memory">Memory & Data</button>
+		<button class="tab-btn" data-tab="render">Rendering</button>
+		<button class="tab-btn" data-tab="physics">Physics</button>
+		<button class="tab-btn" data-tab="input">Input, Audio & UI</button>
+		<button class="tab-btn" data-tab="script">Scripting & Scene</button>
+		<button class="tab-btn" data-tab="net">Networking</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 1: THE CORE LOOP                            -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-core">
+
+		<div class="section">
+			<h2>What is a game engine?</h2>
+			<p>A game engine is the runtime infrastructure that sits between your game logic and the hardware. It handles the
+				things that every game needs — rendering frames, processing input, simulating physics, playing audio, managing
+				memory — so that game code can focus on what makes a particular game <em>that game</em>.</p>
+			<p>The engine's fundamental job is to run a <strong>loop</strong>: read the world state, advance it by one tick,
+				present the result on screen, repeat. Every subsystem in this reference hangs off this loop. Understanding its
+				structure is understanding the spine of the entire architecture.</p>
+		</div>
+
+		<div class="section">
+			<h2>The frame lifecycle</h2>
+			<p>Every frame follows the same high-level sequence. The order matters — each phase depends on the output of the
+				previous one.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">One frame, simplified</div>
+				<div class="flow" style="justify-content: center;">
+					<div class="flow-node bg-input" style="color:var(--c-input);">Poll Input</div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-node bg-phys" style="color:var(--c-phys);">Physics</div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-node bg-script" style="color:var(--c-script);">Game Logic</div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-node bg-render" style="color:var(--c-render);">Render</div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-node"
+							 style="background:rgba(200,206,224,0.06); border:1px solid var(--border); color:var(--text-dim);">Present
+					</div>
+				</div>
+				<div class="diagram-caption">
+					<strong style="color:var(--c-input);">Poll Input</strong> captures OS events.
+					<strong style="color:var(--c-phys);">Physics</strong> steps the simulation.
+					<strong style="color:var(--c-script);">Game Logic</strong> runs gameplay code (AI, state machines, scripted
+					behavior).
+					<strong style="color:var(--c-render);">Render</strong> builds the command list for the GPU.
+					<strong>Present</strong> swaps the back buffer to the display.
+				</div>
+			</div>
+
+			<p>In practice, many of these overlap or run in parallel on different threads (physics on one, rendering on
+				another, audio on a third). But the logical dependency order is always: <strong>know what the player did →
+					update the world → show the result.</strong></p>
+		</div>
+
+		<div class="section">
+			<h2>The timestep problem</h2>
+			<p>Frames don't take constant time. A simple scene might render in 4ms; a complex one in 20ms. If you advance your
+				simulation by "one frame" each loop, your game runs faster on fast machines and slower on slow ones. Physics
+				breaks. Animations stutter. Multiplayer desyncs.</p>
+			<p>There are three common approaches, each with a fundamental tradeoff:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Approach</th>
+						<th>How it works</th>
+						<th>Upside</th>
+						<th>Downside</th>
+					</tr>
+					<tr>
+						<td style="color:var(--c-core); font-weight:600;">Variable dt</td>
+						<td>Pass elapsed time since last frame as <code>dt</code> to all systems</td>
+						<td>Simple, smooth visuals</td>
+						<td>Physics non-deterministic; large dt spikes cause tunneling and instability</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-phys); font-weight:600;">Fixed timestep</td>
+						<td>Accumulate real time; step simulation in fixed-size chunks (e.g. 1/60s)</td>
+						<td>Deterministic physics; stable; reproducible</td>
+						<td>Rendering between steps shows stale state — need interpolation</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-render); font-weight:600;">Semi-fixed</td>
+						<td>Fixed physics step + interpolated render + capped accumulator</td>
+						<td>Best of both — smooth visuals, stable physics</td>
+						<td>More complex; must store previous + current state for interpolation</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>The industry-standard pattern is semi-fixed</strong> (Glenn Fiedler's "Fix Your Timestep!"). Physics
+				runs at a fixed rate (e.g. 60 Hz), the renderer interpolates between the previous and current physics state
+				based on the leftover accumulator time. This gives buttery-smooth visuals with deterministic simulation.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The canonical semi-fixed loop</h2>
+			<div class="codeblock"><span class="kw">const double</span> STEP = <span class="num">1.0</span> / <span
+				class="num">60.0</span>; <span class="cm">// 16.67ms fixed physics tick</span>
+				<span class="kw">double</span> accumulator = <span class="num">0.0</span>;
+				<span class="kw">double</span> prev_time = <span class="fn">get_time</span>();
+
+				<span class="kw">while</span> (running) {
+				<span class="kw">double</span> now = <span class="fn">get_time</span>();
+				<span class="kw">double</span> frame_dt = now - prev_time;
+				prev_time = now;
+
+				accumulator += frame_dt;
+				accumulator = <span class="fn">min</span>(accumulator, <span class="num">0.25</span>); <span class="cm">// clamp: avoid spiral of death</span>
+
+				<span class="cm">// Phase 1: Fixed-rate simulation (may run 0, 1, or multiple times)</span>
+				<span class="kw">while</span> (accumulator >= STEP) {
+				<span class="fn">save_previous_state</span>(); <span class="cm">// for render interpolation</span>
+				<span class="fn">poll_input</span>();
+				<span class="fn">step_physics</span>(STEP);
+				<span class="fn">step_game_logic</span>(STEP);
+				accumulator -= STEP;
+				}
+
+				<span class="cm">// Phase 2: Render with interpolation</span>
+				<span class="kw">double</span> alpha = accumulator / STEP; <span
+					class="cm">// 0.0–1.0: how far between ticks</span>
+				<span class="fn">render</span>(alpha); <span class="cm">// lerp(prev_state, curr_state, alpha)</span>
+				<span class="fn">present</span>();
+				}
+			</div>
+
+			<p>The <strong>spiral of death</strong> is what happens when simulation is slower than real-time: the accumulator
+				grows every frame, causing more simulation steps per frame, which makes the frame even slower, which grows the
+				accumulator further. The <code>0.25</code> clamp prevents this — it caps to at most ~15 physics steps per frame,
+				dropping simulation time if the machine truly can't keep up.</p>
+		</div>
+
+		<div class="section">
+			<h2>Subsystem execution order</h2>
+			<p>Within the loop, ordering isn't arbitrary. Here's a more complete picture showing dependencies:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Execution order within one simulation tick</div>
+				<div style="font-family:var(--mono); font-size:12px; line-height: 2.4; padding: 4px 0;">
+					<div><span style="color:var(--text-xdim);">1.</span> <span class="c-input">Input</span> <span
+						style="color:var(--text-xdim);">— capture OS events, update action map state</span></div>
+					<div><span style="color:var(--text-xdim);">2.</span> <span class="c-script">Gameplay scripts</span> <span
+						style="color:var(--text-xdim);">— AI decisions, state machines, spawn/destroy entities</span></div>
+					<div><span style="color:var(--text-xdim);">3.</span> <span class="c-phys">Physics</span> <span
+						style="color:var(--text-xdim);">— integrate forces, detect & resolve collisions</span></div>
+					<div><span style="color:var(--text-xdim);">4.</span> <span class="c-script">Post-physics logic</span> <span
+						style="color:var(--text-xdim);">— collision response callbacks, trigger events</span></div>
+					<div><span style="color:var(--text-xdim);">5.</span> <span class="c-script">Animation</span> <span
+						style="color:var(--text-xdim);">— blend trees, IK, skeleton update</span></div>
+					<div><span style="color:var(--text-xdim);">6.</span> <span class="c-render">Scene graph update</span> <span
+						style="color:var(--text-xdim);">— propagate transforms, update bounding volumes</span></div>
+					<div><span style="color:var(--text-xdim);">7.</span> <span class="c-input">Audio</span> <span
+						style="color:var(--text-xdim);">— update listener position, mix sources</span></div>
+				</div>
+				<div class="diagram-caption">
+					Gameplay before physics: so player movement is applied before collision resolves it.
+					Animation after physics: so ragdoll and physics-driven bones reflect the current frame.
+					Audio last: so spatial positioning matches the final resolved transforms.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Go deeper</h2>
+			<div class="deep-list">
+				<span class="deep-tag">Fix Your Timestep (Fiedler)</span>
+				<span class="deep-tag">Multi-threaded game loops</span>
+				<span class="deep-tag">Job systems & task graphs</span>
+				<span class="deep-tag">Frame pipelining</span>
+				<span class="deep-tag">Deterministic lockstep</span>
+				<span class="deep-tag">Spiral of death mitigation</span>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 2: MEMORY & DATA                            -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-memory">
+
+		<div class="section">
+			<h2>Why memory matters more than algorithms</h2>
+			<p>Modern CPUs can execute billions of operations per second — but they stall for <strong>hundreds of
+				cycles</strong> waiting for data from main memory. A cache miss on an L1 lookup costs ~4ns; a main memory fetch
+				costs ~100ns. That's a 25× penalty. In a game engine running at 60fps (16.6ms per frame), thousands of cache
+				misses can eat your entire budget.</p>
+			<p>This is why engine programmers obsess over <strong>data layout</strong> — how objects live in memory determines
+				how fast you can iterate over them, which determines your frame time. The wrong data structure with O(1) access
+				can be slower than a linear scan of a cache-friendly array.</p>
+		</div>
+
+		<div class="section">
+			<h2>Custom allocators</h2>
+			<p>General-purpose <code>malloc</code>/<code>free</code> (or <code>new</code>/<code>delete</code>) are flexible
+				but slow for game workloads. They maintain free-lists, deal with fragmentation, and take unpredictable time.
+				Engine allocators trade generality for speed by constraining how memory is used.</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Allocator</th>
+						<th>Strategy</th>
+						<th>Alloc cost</th>
+						<th>Free cost</th>
+						<th>Use case</th>
+					</tr>
+					<tr>
+						<td style="color:var(--c-core); font-weight:600;">Linear / Bump</td>
+						<td>Increment a pointer. Reset the whole block at once.</td>
+						<td>O(1) — pointer bump</td>
+						<td>O(1) — reset all</td>
+						<td>Per-frame scratch data, temporary strings, command buffers</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-phys); font-weight:600;">Stack</td>
+						<td>Linear, but you can also pop the most recent allocation (LIFO).</td>
+						<td>O(1)</td>
+						<td>O(1) — LIFO only</td>
+						<td>Scoped temp allocations, level loading stages</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-mem); font-weight:600;">Pool / Slab</td>
+						<td>Pre-allocate N fixed-size blocks. Free-list of available slots.</td>
+						<td>O(1)</td>
+						<td>O(1)</td>
+						<td>Entities, particles, bullets — many identical objects created/destroyed rapidly</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-render); font-weight:600;">Arena</td>
+						<td>Allocate from a large block; free everything when the arena is destroyed.</td>
+						<td>O(1)</td>
+						<td>Bulk only</td>
+						<td>Level lifetime data, asset groups that load/unload together</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>The unifying principle:</strong> restrict the freeing pattern and you eliminate fragmentation and
+				overhead. A bump allocator is literally just <code>ptr += size; return ptr - size;</code> — the fastest possible
+				allocation.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>AoS vs SoA: the layout decision</h2>
+			<p>When you have thousands of entities, the way you arrange their data in memory determines your cache behavior.
+				This is the single most impactful data layout decision in engine design.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Array of Structures (AoS) — the OOP default</div>
+				<div style="font-family:var(--mono); font-size:11px; padding: 8px 0; line-height:1.8;">
+					<div style="color:var(--text-dim); margin-bottom:4px;">Entity[] entities; // each entity is a struct with all
+						fields
+					</div>
+					<div style="display:flex; gap:2px; flex-wrap:wrap;">
+						<span style="padding:4px 8px; border-radius:3px; background:rgba(240,101,101,0.1); color:var(--c-core);">pos₀</span>
+						<span
+							style="padding:4px 8px; border-radius:3px; background:rgba(232,184,52,0.1); color:var(--c-mem);">vel₀</span>
+						<span
+							style="padding:4px 8px; border-radius:3px; background:rgba(77,196,98,0.1); color:var(--c-render);">hp₀</span>
+						<span style="padding:4px 8px; border-radius:3px; background:rgba(61,155,232,0.1); color:var(--c-phys);">name₀</span>
+						<span style="padding:4px 6px; color:var(--text-xdim);">│</span>
+						<span style="padding:4px 8px; border-radius:3px; background:rgba(240,101,101,0.1); color:var(--c-core);">pos₁</span>
+						<span
+							style="padding:4px 8px; border-radius:3px; background:rgba(232,184,52,0.1); color:var(--c-mem);">vel₁</span>
+						<span
+							style="padding:4px 8px; border-radius:3px; background:rgba(77,196,98,0.1); color:var(--c-render);">hp₁</span>
+						<span style="padding:4px 8px; border-radius:3px; background:rgba(61,155,232,0.1); color:var(--c-phys);">name₁</span>
+						<span style="padding:4px 6px; color:var(--text-xdim);">│</span>
+						<span style="padding:4px 8px; color:var(--text-xdim);">…</span>
+					</div>
+				</div>
+				<div class="diagram-caption">Moving all entities? You load <span class="c-mem">vel</span>, <span
+					class="c-render">hp</span>, <span class="c-phys">name</span> into cache even though you only need <span
+					class="c-core">pos</span> and <span class="c-mem">vel</span>. Wasted bandwidth.
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Structure of Arrays (SoA) — the DOD approach</div>
+				<div style="font-family:var(--mono); font-size:11px; padding: 8px 0; line-height:1.8;">
+					<div style="color:var(--text-dim); margin-bottom:4px;">Separate array per field — iterate only what you need
+					</div>
+					<div style="margin-bottom:3px; display:flex; gap:2px; flex-wrap:wrap;">
+						<span style="padding:4px 8px; border-radius:3px; background:rgba(240,101,101,0.1); color:var(--c-core);">pos₀</span>
+						<span style="padding:4px 8px; border-radius:3px; background:rgba(240,101,101,0.1); color:var(--c-core);">pos₁</span>
+						<span style="padding:4px 8px; border-radius:3px; background:rgba(240,101,101,0.1); color:var(--c-core);">pos₂</span>
+						<span style="padding:4px 8px; border-radius:3px; background:rgba(240,101,101,0.1); color:var(--c-core);">pos₃</span>
+						<span style="padding:4px 8px; border-radius:3px; background:rgba(240,101,101,0.1); color:var(--c-core);">pos₄</span>
+						<span style="padding:4px 8px; color:var(--text-xdim);">…</span>
+					</div>
+					<div style="margin-bottom:3px; display:flex; gap:2px; flex-wrap:wrap;">
+						<span
+							style="padding:4px 8px; border-radius:3px; background:rgba(232,184,52,0.1); color:var(--c-mem);">vel₀</span>
+						<span
+							style="padding:4px 8px; border-radius:3px; background:rgba(232,184,52,0.1); color:var(--c-mem);">vel₁</span>
+						<span
+							style="padding:4px 8px; border-radius:3px; background:rgba(232,184,52,0.1); color:var(--c-mem);">vel₂</span>
+						<span
+							style="padding:4px 8px; border-radius:3px; background:rgba(232,184,52,0.1); color:var(--c-mem);">vel₃</span>
+						<span
+							style="padding:4px 8px; border-radius:3px; background:rgba(232,184,52,0.1); color:var(--c-mem);">vel₄</span>
+						<span style="padding:4px 8px; color:var(--text-xdim);">…</span>
+					</div>
+				</div>
+				<div class="diagram-caption">Moving all entities? Load only <span class="c-core">positions</span> and <span
+					class="c-mem">velocities</span>. Every byte in the cache line is useful. This is why SoA can be 4–10× faster
+					for batch operations.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>ECS: the engine-scale pattern</h2>
+			<p><strong>Entity Component System</strong> is SoA thinking applied to the entire engine. It separates identity,
+				data, and behavior into three orthogonal concepts:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Concept</th>
+						<th>What it is</th>
+						<th>Analogy</th>
+					</tr>
+					<tr>
+						<td style="color:var(--c-core); font-weight:600;">Entity</td>
+						<td>A unique ID (often just an integer/index). No data, no behavior. Just an identifier that components
+							attach to.
+						</td>
+						<td>A row number in a spreadsheet</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-mem); font-weight:600;">Component</td>
+						<td>A plain data struct. <code>Position { x, y, z }</code>, <code>Health { current, max }</code>, <code>Sprite
+							{ texture_id, uv }</code>. No methods.
+						</td>
+						<td>A column in the spreadsheet</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-render); font-weight:600;">System</td>
+						<td>A function that iterates over all entities that have a specific set of components. The <em>behavior</em>.
+						</td>
+						<td>A formula applied to matching rows</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>A "MovementSystem" queries all entities with <code>Position</code> + <code>Velocity</code> and does <code>pos
+				+= vel * dt</code>. It doesn't know or care if those entities also have <code>Health</code> or
+				<code>Sprite</code>. Components compose freely — you build entity archetypes by mixing and matching data, not by
+				inheritance hierarchies.</p>
+
+			<div class="callout green">
+				<strong>Why it wins:</strong> No inheritance diamonds. No virtual dispatch overhead. Data lives in
+				cache-friendly arrays. Systems can be parallelized trivially (they operate on disjoint component sets). Adding
+				new behavior = adding a new system, not modifying a base class.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Asset lifetime management</h2>
+			<p>Textures, meshes, audio clips, and shaders are loaded from disk and live in memory until unloaded. The engine
+				needs to track: <strong>who references this asset?</strong> and <strong>when can it be freed?</strong></p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Strategy</th>
+						<th>Mechanism</th>
+						<th>Tradeoff</th>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">Reference counting</td>
+						<td>Each asset has a count. Load increments, unload decrements. Free at zero.</td>
+						<td>Simple; can leak with cycles (rare for assets). Atomic refcounts expensive in hot paths.</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">Handle table</td>
+						<td>Assets accessed via opaque handles (ID + generation). Table maps handle → pointer. Handles can be
+							validated.
+						</td>
+						<td>Indirection cost; safe against dangling. Generation catches use-after-free.</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">Arena/scope</td>
+						<td>All assets for a level go in one arena. Free the arena on level transition.</td>
+						<td>Bulk free is fast; no per-asset tracking. Can't share assets across levels without a global tier.</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Most engines use a <strong>tiered approach</strong>: a global pool for shared assets (fonts, UI textures,
+				player model), a level arena for level-specific data, and a frame allocator for transient per-frame data.</p>
+		</div>
+
+		<div class="section">
+			<h2>Go deeper</h2>
+			<div class="deep-list">
+				<span class="deep-tag">Data-Oriented Design (Mike Acton)</span>
+				<span class="deep-tag">ECS architectures (Archetype vs Sparse Set)</span>
+				<span class="deep-tag">Cache line mechanics</span>
+				<span class="deep-tag">Hot/cold splitting</span>
+				<span class="deep-tag">Unity DOTS / Bevy ECS</span>
+				<span class="deep-tag">Generational indices</span>
+				<span class="deep-tag">Virtual memory & page faults</span>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 3: RENDERING                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-render">
+
+		<div class="section">
+			<h2>What the renderer actually does</h2>
+			<p>The renderer's job: take a scene description (meshes, materials, lights, camera) and produce a 2D image — 60+
+				times per second. This involves geometry transformation, visibility determination, lighting computation, and
+				communicating all of it to the GPU in a way that doesn't bottleneck on the CPU.</p>
+			<p>The GPU is a massively parallel processor optimized for one thing: doing the same operation on millions of data
+				points (vertices, then pixels). The renderer's entire design revolves around <strong>keeping the GPU
+					fed</strong> — minimizing the time it sits idle waiting for the CPU to tell it what to draw next.</p>
+		</div>
+
+		<div class="section">
+			<h2>The rendering pipeline</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">High-level stages — CPU side then GPU side</div>
+				<div style="font-family:var(--mono); font-size:12px; line-height: 2.4; padding: 4px 0;">
+					<div
+						style="color:var(--text-dim); font-size:10px; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">
+						CPU — prepare work for the GPU
+					</div>
+					<div><span style="color:var(--c-core);">1. Frustum culling</span> <span style="color:var(--text-xdim);">— discard objects outside the camera's view pyramid</span>
+					</div>
+					<div><span style="color:var(--c-mem);">2. Sorting</span> <span style="color:var(--text-xdim);">— group by material/shader to minimize GPU state changes</span>
+					</div>
+					<div><span style="color:var(--c-render);">3. Batching</span> <span style="color:var(--text-xdim);">— merge compatible draws into fewer GPU calls</span>
+					</div>
+					<div><span style="color:var(--c-phys);">4. Command submission</span> <span style="color:var(--text-xdim);">— record draw commands into a command buffer</span>
+					</div>
+					<div
+						style="color:var(--text-dim); font-size:10px; text-transform:uppercase; letter-spacing:1px; margin:10px 0 6px;">
+						GPU — execute the pipeline
+					</div>
+					<div><span style="color:var(--c-input);">5. Vertex shader</span> <span style="color:var(--text-xdim);">— transform vertices from model space → clip space</span>
+					</div>
+					<div><span style="color:var(--c-script);">6. Rasterization</span> <span style="color:var(--text-xdim);">— convert triangles to fragments (candidate pixels)</span>
+					</div>
+					<div><span style="color:var(--c-net);">7. Fragment shader</span> <span style="color:var(--text-xdim);">— compute final color per pixel (lighting, texturing)</span>
+					</div>
+					<div><span style="color:var(--text-b);">8. Output merge</span> <span style="color:var(--text-xdim);">— depth test, blending, write to framebuffer</span>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Draw calls: the CPU-GPU bottleneck</h2>
+			<p>A <strong>draw call</strong> is a single instruction from the CPU to the GPU: "draw this mesh with this
+				material." Each one has overhead — validating state, transferring uniform data, synchronizing. A desktop GPU can
+				handle millions of triangles but may choke on 10,000 individual draw calls.</p>
+			<p>This is the central tension of rendering architecture: <strong>the GPU wants volume, the CPU wants
+				simplicity.</strong> Every rendering optimization technique is, at its core, a strategy for submitting fewer,
+				larger draw calls.</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Technique</th>
+						<th>Strategy</th>
+						<th>When to use</th>
+					</tr>
+					<tr>
+						<td style="color:var(--c-render); font-weight:600;">Static batching</td>
+						<td>Merge non-moving meshes sharing a material into one big mesh at load time</td>
+						<td>Environment geometry, props, decorations</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-mem); font-weight:600;">Dynamic batching</td>
+						<td>Merge small meshes per-frame into a shared vertex buffer</td>
+						<td>Particles, small dynamic objects</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-phys); font-weight:600;">Instancing</td>
+						<td>Draw one mesh N times with per-instance data (position, color, scale)</td>
+						<td>Forests, crowds, grass — many copies of the same mesh</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-input); font-weight:600;">Indirect drawing</td>
+						<td>GPU itself decides what and how many to draw (GPU-driven rendering)</td>
+						<td>Modern engines; Nanite-style virtual geometry</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Forward vs Deferred rendering</h2>
+			<p>The two dominant approaches to handling multiple lights differ in <em>when</em> lighting is computed.</p>
+
+			<div class="tradeoff">
+				<div class="tradeoff-side bg-render">
+					<div class="ts-label" style="color:var(--c-render);">Forward rendering</div>
+					<div class="ts-items">
+						Compute lighting in the fragment shader, per object, per light<br>
+						Cost: <strong>objects × lights</strong><br>
+						Simple to implement<br>
+						Handles transparency naturally<br>
+						MSAA works out of the box<br>
+						Struggles with many dynamic lights
+					</div>
+				</div>
+				<div class="tradeoff-side bg-phys">
+					<div class="ts-label" style="color:var(--c-phys);">Deferred rendering</div>
+					<div class="ts-items">
+						First pass: write geometry data to G-buffer (position, normal, albedo)<br>
+						Second pass: compute lighting per pixel from G-buffer<br>
+						Cost: <strong>pixels × lights</strong> (objects don't matter)<br>
+						Handles hundreds of lights efficiently<br>
+						High memory bandwidth; MSAA is expensive<br>
+						Transparency requires separate forward pass
+					</div>
+				</div>
+			</div>
+
+			<p>Most modern engines use <strong>deferred for opaque geometry</strong> (to handle many lights efficiently) and a
+				<strong>forward pass for transparent objects</strong> (which can't write to a G-buffer meaningfully, since
+				multiple surfaces overlap per pixel).</p>
+		</div>
+
+		<div class="section">
+			<h2>The material/shader model</h2>
+			<p>A <strong>material</strong> is the combination of a shader program (vertex + fragment code) and its parameter
+				bindings (textures, colors, roughness values). The engine typically organizes materials into a hierarchy to
+				minimize state changes:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Sorting key structure (most expensive changes first)</div>
+				<div style="font-family:var(--mono); font-size:12px; line-height:2.2; padding:4px 0;">
+					<span style="color:var(--c-core);">Render pass</span> <span style="color:var(--text-xdim);">></span>
+					<span style="color:var(--c-mem);">Shader program</span> <span style="color:var(--text-xdim);">></span>
+					<span style="color:var(--c-render);">Material (textures)</span> <span style="color:var(--text-xdim);">></span>
+					<span style="color:var(--c-phys);">Depth (front-to-back for opaque)</span>
+				</div>
+				<div class="diagram-caption">Objects are sorted by this key before submission. Changing render pass or shader is
+					expensive (pipeline state change). Changing textures is moderate. Depth sorting maximizes early-Z rejection
+					(fragments behind already-drawn geometry are discarded before the fragment shader runs).
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Graphics API landscape</h2>
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>API</th>
+						<th>Level</th>
+						<th>Platform</th>
+						<th>Notes</th>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">OpenGL / OpenGL ES</td>
+						<td>High-level</td>
+						<td>Cross-platform</td>
+						<td>Legacy but simple. Driver does most work. Still used in learning / older engines.</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">Vulkan</td>
+						<td>Low-level</td>
+						<td>Cross-platform (excl. Apple)</td>
+						<td>Explicit control over memory, sync, command buffers. Verbose but performant.</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">DirectX 12</td>
+						<td>Low-level</td>
+						<td>Windows / Xbox</td>
+						<td>Similar philosophy to Vulkan. Dominant on Windows for AAA.</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">Metal</td>
+						<td>Mid-level</td>
+						<td>Apple only</td>
+						<td>Modern, clean API. Required for iOS/macOS.</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">WebGPU</td>
+						<td>Mid-level</td>
+						<td>Browsers / native (via wgpu)</td>
+						<td>Cross-platform abstraction over Vulkan/Metal/DX12. Rising fast.</td>
+					</tr>
+				</table>
+			</div>
+			<p>Most custom engines abstract over multiple APIs via a <strong>Render Hardware Interface (RHI)</strong> — a thin
+				translation layer that maps engine-level concepts (buffers, textures, pipelines) to API-specific calls.</p>
+		</div>
+
+		<div class="section">
+			<h2>Go deeper</h2>
+			<div class="deep-list">
+				<span class="deep-tag">PBR (Physically Based Rendering)</span>
+				<span class="deep-tag">Shadow mapping techniques</span>
+				<span class="deep-tag">Screen-space effects (SSAO, SSR)</span>
+				<span class="deep-tag">GPU-driven rendering / Nanite</span>
+				<span class="deep-tag">Compute shaders</span>
+				<span class="deep-tag">Render graph / frame graph</span>
+				<span class="deep-tag">LOD (Level of Detail)</span>
+				<span class="deep-tag">Occlusion culling</span>
+			</div>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 4: PHYSICS                                  -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-physics">
+
+		<div class="section">
+			<h2>What the physics engine solves</h2>
+			<p>The physics engine answers two questions every tick: <strong>"Is anything overlapping?"</strong> (collision
+				detection) and <strong>"What happens when things overlap?"</strong> (collision response). On top of this, it
+				integrates forces to move rigid bodies — gravity, impulses, friction, constraints.</p>
+			<p>The core challenge is performance: checking every pair of N objects for collision is O(N²). With thousands of
+				objects, that's millions of checks per frame. The entire architecture of a physics engine is designed to avoid
+				doing unnecessary work.</p>
+		</div>
+
+		<div class="section">
+			<h2>The two-phase collision pipeline</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">Broad phase → Narrow phase</div>
+				<div class="flow" style="justify-content:center;">
+					<div class="flow-node bg-phys" style="color:var(--c-phys);">All objects<br><span
+						style="font-size:9px; color:var(--text-dim);">N objects</span></div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-node bg-mem" style="color:var(--c-mem);">Broad Phase<br><span
+						style="font-size:9px; color:var(--text-dim);">cheap AABB test</span></div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-node bg-script" style="color:var(--c-script);">Candidate pairs<br><span
+						style="font-size:9px; color:var(--text-dim);">≪ N²</span></div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-node bg-core" style="color:var(--c-core);">Narrow Phase<br><span
+						style="font-size:9px; color:var(--text-dim);">exact shape test</span></div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-node bg-render" style="color:var(--c-render);">Contacts<br><span
+						style="font-size:9px; color:var(--text-dim);">point + normal + depth</span></div>
+				</div>
+				<div class="diagram-caption">
+					<strong style="color:var(--c-mem);">Broad phase</strong> uses simple bounding volumes (axis-aligned bounding
+					boxes) and spatial structures to quickly eliminate pairs that <em>can't possibly</em> be colliding. This
+					reduces the candidate set from O(N²) to something manageable.<br>
+					<strong style="color:var(--c-core);">Narrow phase</strong> performs exact geometric tests (GJK, SAT) only on
+					candidate pairs. Expensive, but only runs on a small subset.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Spatial partitioning strategies</h2>
+			<p>Broad phase needs a data structure that answers "which objects are near each other?" efficiently. The choice
+				depends on your game's characteristics:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Structure</th>
+						<th>How it works</th>
+						<th>Best for</th>
+						<th>Weakness</th>
+					</tr>
+					<tr>
+						<td style="color:var(--c-mem); font-weight:600;">Uniform grid</td>
+						<td>Divide world into fixed-size cells. Objects register in cells they overlap.</td>
+						<td>Uniformly distributed objects of similar size (particles, bullets)</td>
+						<td>Wastes memory on empty cells; struggles with varied object sizes</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-render); font-weight:600;">Quadtree / Octree</td>
+						<td>Recursively subdivide space. Deeper nodes = smaller regions.</td>
+						<td>2D/3D games with clustered objects</td>
+						<td>Objects spanning cell boundaries need multi-registration</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-phys); font-weight:600;">BVH (Bounding Volume Hierarchy)</td>
+						<td>Binary tree of bounding volumes wrapping groups of objects. Top-down or incremental rebuild.</td>
+						<td>General-purpose; dominant in modern engines</td>
+						<td>Rebuild cost when many objects move; incremental updates help</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-core); font-weight:600;">Sort-and-sweep</td>
+						<td>Sort AABBs along one axis; overlaps on sorted axis = candidate pairs.</td>
+						<td>Scenes where objects mostly move slowly (overlap lists stay coherent)</td>
+						<td>Degrades with clustered objects along the sweep axis</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Rigid body simulation</h2>
+			<p>A rigid body has mass, position, orientation, and velocity (linear + angular). Each physics tick follows the
+				same loop:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">One physics tick</div>
+				<div style="font-family:var(--mono); font-size:12px; line-height: 2.4; padding: 4px 0;">
+					<div><span style="color:var(--text-xdim);">1.</span> <span style="color:var(--c-mem);">Apply forces</span>
+						<span style="color:var(--text-xdim);">— gravity, user impulses, springs, drag</span></div>
+					<div><span style="color:var(--text-xdim);">2.</span> <span style="color:var(--c-phys);">Integrate</span> <span
+						style="color:var(--text-xdim);">— velocity += force/mass * dt; position += velocity * dt</span></div>
+					<div><span style="color:var(--text-xdim);">3.</span> <span
+						style="color:var(--c-core);">Detect collisions</span> <span style="color:var(--text-xdim);">— broad → narrow → generate contacts</span>
+					</div>
+					<div><span style="color:var(--text-xdim);">4.</span> <span
+						style="color:var(--c-render);">Resolve constraints</span> <span style="color:var(--text-xdim);">— push overlapping bodies apart, apply impulses</span>
+					</div>
+					<div><span style="color:var(--text-xdim);">5.</span> <span style="color:var(--c-script);">Apply velocity corrections</span>
+						<span style="color:var(--text-xdim);">— friction, restitution (bounciness)</span></div>
+				</div>
+				<div class="diagram-caption">Steps 3–5 often iterate multiple times (solver iterations) because resolving one
+					contact can create or worsen another. More iterations = more stable stacking, but more CPU cost.
+				</div>
+			</div>
+
+			<div class="callout warn">
+				<strong>Tunneling:</strong> a fast-moving object can pass entirely through a thin wall between two ticks
+				(bullet-through-paper problem). Solutions: continuous collision detection (CCD) — sweep the object's path
+				between ticks and find the first time of impact. Expensive, so typically only enabled for fast/small objects.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Collision shapes</h2>
+			<p>Narrow phase performance depends entirely on the geometric primitives used. Engines support a hierarchy from
+				cheap to expensive:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Shape</th>
+						<th>Test cost</th>
+						<th>Use case</th>
+					</tr>
+					<tr>
+						<td style="color:var(--c-render); font-weight:600;">Sphere</td>
+						<td>Trivial — distance check</td>
+						<td>Projectiles, particles, simple characters</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-mem); font-weight:600;">AABB (Axis-Aligned Box)</td>
+						<td>Very cheap — 3 axis interval overlaps</td>
+						<td>Broad phase, triggers, boxy objects</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-phys); font-weight:600;">OBB (Oriented Box)</td>
+						<td>Moderate — SAT with 15 axes</td>
+						<td>Rotated crates, vehicles</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-core); font-weight:600;">Capsule</td>
+						<td>Cheap — line segment distance</td>
+						<td>Characters (common for player controllers)</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-script); font-weight:600;">Convex hull</td>
+						<td>Moderate — GJK algorithm</td>
+						<td>Complex rigid bodies</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-input); font-weight:600;">Triangle mesh</td>
+						<td>Expensive — per-triangle tests via BVH</td>
+						<td>Static environment only</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Go deeper</h2>
+			<div class="deep-list">
+				<span class="deep-tag">GJK algorithm</span>
+				<span class="deep-tag">SAT (Separating Axis Theorem)</span>
+				<span class="deep-tag">Constraint solvers (sequential impulse)</span>
+				<span class="deep-tag">Continuous Collision Detection</span>
+				<span class="deep-tag">Joints & constraints</span>
+				<span class="deep-tag">Ragdoll physics</span>
+				<span class="deep-tag">Soft body / cloth simulation</span>
+				<span class="deep-tag">Physics engines: Box2D, Rapier, Jolt, PhysX</span>
+			</div>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 5: INPUT, AUDIO & UI                        -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-input">
+
+		<div class="section">
+			<h2>Why these three share a tab</h2>
+			<p>Input, audio, and UI are the engine's <strong>interface layer</strong> — the systems that bridge the player and
+				the simulation. They share common challenges: platform-specific APIs, latency sensitivity, and the need for an
+				abstraction layer that keeps game code portable.</p>
+		</div>
+
+		<div class="section">
+			<h2>Input abstraction</h2>
+			<p>Raw input comes from the OS as hardware events: key presses, mouse deltas, gamepad axis values, touch
+				coordinates. The engine needs to transform these into game-meaningful <strong>actions</strong> that game code
+				queries without knowing which device produced them.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Input abstraction pipeline</div>
+				<div class="flow" style="justify-content:center;">
+					<div class="flow-node bg-input" style="color:var(--c-input);">OS events<br><span
+						style="font-size:9px; color:var(--text-dim);">key, mouse, pad</span></div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-node bg-mem" style="color:var(--c-mem);">Device layer<br><span
+						style="font-size:9px; color:var(--text-dim);">normalize, deadzone</span></div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-node bg-script" style="color:var(--c-script);">Action map<br><span
+						style="font-size:9px; color:var(--text-dim);">bind → action</span></div>
+					<div class="flow-arrow">→</div>
+					<div class="flow-node bg-render" style="color:var(--c-render);">Game code<br><span
+						style="font-size:9px; color:var(--text-dim);">is_action("jump")?</span></div>
+				</div>
+				<div class="diagram-caption">
+					The <strong style="color:var(--c-script);">action map</strong> is the key abstraction: it decouples "spacebar
+					was pressed" from "the player wants to jump." This allows rebinding, multiple input devices, and input
+					recording/replay.
+				</div>
+			</div>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Input concept</th>
+						<th>What it means</th>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">Action</td>
+						<td>A named game intent: "jump," "fire," "move_x." Can be bound to any hardware input.</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">Binding</td>
+						<td>A mapping from hardware input to action. "Space → jump," "Gamepad A → jump."</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">Context</td>
+						<td>A set of bindings active at a given time. "Gameplay" context vs "Menu" context vs "Vehicle" context.
+						</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">Deadzone</td>
+						<td>Threshold below which analog stick input is treated as zero — prevents drift from hardware
+							imprecision.
+						</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">Input buffering</td>
+						<td>Storing recent inputs for a short window so the game can accept a "jump" pressed slightly before
+							landing. Critical for responsive feel in action games.
+						</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Audio engine</h2>
+			<p>Audio runs on its own thread with its own fixed-rate tick (typically 48 kHz for mixing). The engine's audio
+				system manages three concerns:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Concern</th>
+						<th>What it involves</th>
+						<th>Key concepts</th>
+					</tr>
+					<tr>
+						<td style="color:var(--c-input); font-weight:600;">Playback & mixing</td>
+						<td>Playing multiple sound sources simultaneously, blending them into a final stereo/surround output</td>
+						<td>Voice limits, priority system, bus routing (SFX bus, music bus, voice bus), volume ducking</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-phys); font-weight:600;">Spatialization</td>
+						<td>Making sounds feel positioned in 3D space relative to the listener</td>
+						<td>Panning, distance attenuation, HRTF (head-related transfer function), reverb zones</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-mem); font-weight:600;">Streaming</td>
+						<td>Large audio (music, voice lines) loaded in chunks rather than entirely in memory</td>
+						<td>Ring buffers, async I/O, decode-on-demand (Vorbis, Opus)</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>Voice limits:</strong> hardware and mixing budget limit how many sounds play simultaneously (64–256 is
+				typical). When the limit is hit, a priority system decides which to cull. Gunfire near the player wins over
+				ambient wind across the map.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>UI: immediate mode vs retained mode</h2>
+			<p>Game UI is fundamentally different from desktop application UI. Games rebuild their entire screen every frame,
+				which enables a simpler programming model:</p>
+
+			<div class="tradeoff">
+				<div class="tradeoff-side bg-core">
+					<div class="ts-label" style="color:var(--c-core);">Immediate Mode (IMGUI)</div>
+					<div class="ts-items">
+						No persistent UI objects — you "draw" the UI every frame<br>
+						<code>if (button("Fire")) { shoot(); }</code><br>
+						State lives in game code, not in UI widgets<br>
+						Easy to debug, easy to add/remove UI dynamically<br>
+						Great for debug tools, HUDs, in-game menus<br>
+						Scales poorly for complex layouts (no built-in layout engine)
+					</div>
+				</div>
+				<div class="tradeoff-side bg-phys">
+					<div class="ts-label" style="color:var(--c-phys);">Retained Mode</div>
+					<div class="ts-items">
+						Persistent UI tree (like DOM or scene graph for UI)<br>
+						Create widgets once, update properties when state changes<br>
+						Built-in layout, styling, animation, accessibility<br>
+						Better for complex UIs: inventories, skill trees, store pages<br>
+						More overhead, harder to synchronize with game state<br>
+						Examples: Scaleform, Coherent, Flutter (experimental)
+					</div>
+				</div>
+			</div>
+
+			<p>Many engines use <strong>both</strong>: immediate mode for gameplay HUD and debug overlays, retained mode
+				(often HTML/CSS-based via embedded browser) for menus, stores, and complex layouts.</p>
+		</div>
+
+		<div class="section">
+			<h2>Go deeper</h2>
+			<div class="deep-list">
+				<span class="deep-tag">Dear ImGui internals</span>
+				<span class="deep-tag">Input replay & recording</span>
+				<span class="deep-tag">Haptics & force feedback</span>
+				<span class="deep-tag">FMOD / Wwise integration</span>
+				<span class="deep-tag">Audio occlusion & propagation</span>
+				<span class="deep-tag">UI rendering (SDF text, batched quads)</span>
+				<span class="deep-tag">Accessibility in games</span>
+			</div>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 6: SCRIPTING & SCENE                        -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-script">
+
+		<div class="section">
+			<h2>The editor-runtime boundary</h2>
+			<p>A game engine serves two audiences: the <strong>runtime</strong> (what players run — fast, lean, shipping code)
+				and the <strong>editor</strong> (what developers use — inspection tools, scene manipulation, hot-reload, undo).
+				The architecture must support both without letting editor features pollute runtime performance.</p>
+			<p>This split influences everything: how entities are created (editor-spawned with undo vs. runtime-spawned from
+				code), how data is serialized (human-readable for the editor vs. binary for shipping), and how code is loaded
+				(hot-reloadable during development vs. statically linked for release).</p>
+		</div>
+
+		<div class="section">
+			<h2>Entity lifecycle</h2>
+			<p>Entities are created, live, and are destroyed — but the <em>timing</em> of these events is surprisingly tricky.
+				You can't destroy an entity mid-iteration over a system (it invalidates the iterator). You can't create one and
+				immediately reference it in the same tick (components may not be allocated yet). Most engines use a <strong>deferred
+					command pattern</strong>:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Deferred entity operations</div>
+				<div style="font-family:var(--mono); font-size:12px; line-height: 2.4; padding: 4px 0;">
+					<div><span style="color:var(--c-script);">During tick</span> <span style="color:var(--text-xdim);">— systems queue commands: spawn(archetype), destroy(entity), add_component(entity, data)</span>
+					</div>
+					<div><span style="color:var(--c-core);">End of tick</span> <span style="color:var(--text-xdim);">— engine processes the command queue atomically: all creates, then all destroys</span>
+					</div>
+					<div><span style="color:var(--c-render);">Next tick</span> <span style="color:var(--text-xdim);">— new entities are visible to all systems; destroyed entities are gone</span>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					This guarantees that no system ever sees a half-constructed or half-destroyed entity. The command queue also
+					makes undo trivial in the editor — just replay the inverse commands.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Scene serialization</h2>
+			<p>A "scene" or "level" is a collection of entities with their component data, plus references to assets (meshes,
+				textures, sounds). The engine needs to save this to disk and load it back — faithfully, quickly, and across
+				engine versions.</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Format</th>
+						<th>Use case</th>
+						<th>Tradeoff</th>
+					</tr>
+					<tr>
+						<td style="color:var(--c-mem); font-weight:600;">Text (JSON, YAML, TOML)</td>
+						<td>Editor saves, human-readable diffs, version control</td>
+						<td>Slow to parse, large files, easy to merge in Git</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-phys); font-weight:600;">Binary (custom / FlatBuffers)</td>
+						<td>Shipping builds, fast loading</td>
+						<td>Fast, compact, but opaque and version-sensitive</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-render); font-weight:600;">Hybrid</td>
+						<td>Text in editor, "cook" to binary for builds</td>
+						<td>Best of both — extra build step. This is the standard approach.</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>Asset cooking:</strong> the process of converting source assets (PNG, FBX, WAV) into runtime-optimized
+				formats (compressed GPU textures, optimized mesh buffers, encoded audio). This happens at build time, not
+				runtime. The cooked formats are platform-specific — a GPU texture for PC differs from one for mobile.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Scripting & hot-reload</h2>
+			<p>Iteration speed is everything during development. Recompiling a C++ engine takes seconds to minutes; designers
+				and gameplay programmers need faster feedback loops. This drives the scripting layer:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Approach</th>
+						<th>Languages</th>
+						<th>Characteristics</th>
+					</tr>
+					<tr>
+						<td style="color:var(--c-script); font-weight:600;">Embedded scripting</td>
+						<td>Lua, Wren, AngelScript</td>
+						<td>Lightweight VM embedded in engine. Hot-reload by re-executing scripts. Low barrier. Sandboxed.
+							Performance cost for heavy logic.
+						</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-phys); font-weight:600;">Managed runtime</td>
+						<td>C# (Unity), GDScript (Godot)</td>
+						<td>Richer language features, good tooling. Hot-reload via assembly reloading. Moderate overhead.</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-core); font-weight:600;">Native hot-reload</td>
+						<td>C/C++ (via DLL/SO reload)</td>
+						<td>Compile gameplay to a shared library; engine unloads/reloads it. Full native speed. Fragile — state
+							migration across reloads is hard.
+						</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-input); font-weight:600;">Visual scripting</td>
+						<td>Blueprints (Unreal), Bolt (Unity)</td>
+						<td>Node graphs. Accessible to non-programmers. Limited expressiveness. Can generate native code.</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Most engines use a <strong>two-tier approach</strong>: performance-critical systems (rendering, physics, audio)
+				in native code; gameplay logic in a scripting layer. The boundary between tiers is defined by the component
+				interface — scripts read and write component data, native systems process it.</p>
+		</div>
+
+		<div class="section">
+			<h2>Prefabs and instancing</h2>
+			<p>A <strong>prefab</strong> (or archetype template) is a reusable entity blueprint — "enemy_goblin" defines a set
+				of components with default values. Instances in the scene can override specific values (this goblin has 50 HP
+				instead of the default 100). When you change the prefab, all instances update — unless they've overridden that
+				field.</p>
+			<p>This is essentially <strong>prototype-based inheritance for game objects</strong>. The technical challenge:
+				tracking which fields are overridden per instance, and propagating prefab changes efficiently to thousands of
+				instances without reserializing the entire scene.</p>
+		</div>
+
+		<div class="section">
+			<h2>Go deeper</h2>
+			<div class="deep-list">
+				<span class="deep-tag">Prefab / nesting systems</span>
+				<span class="deep-tag">Undo/redo architecture</span>
+				<span class="deep-tag">Hot-reload state migration</span>
+				<span class="deep-tag">Asset pipelines & cooking</span>
+				<span class="deep-tag">Reflection & type introspection</span>
+				<span class="deep-tag">Editor UI frameworks</span>
+				<span class="deep-tag">Version migration for serialized data</span>
+			</div>
+		</div>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 7: NETWORKING                               -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-net">
+
+		<div class="section">
+			<h2>The fundamental constraint</h2>
+			<p>Network programming in games is dominated by one fact: <strong>light takes time to travel.</strong> Even at the
+				speed of light, a round trip between New York and London takes ~60ms. Add routing, processing, and congestion,
+				and real-world latency is 50–200ms. Your game loop ticks every ~16ms. By the time a player's input reaches the
+				server, the game has advanced 3–12 frames.</p>
+			<p>Every networking architecture in games is a strategy for <strong>hiding, compensating for, or tolerating
+				latency</strong> while keeping all players' views of the world acceptably consistent.</p>
+		</div>
+
+		<div class="section">
+			<h2>Network topologies</h2>
+
+			<div class="tradeoff">
+				<div class="tradeoff-side bg-net">
+					<div class="ts-label" style="color:var(--c-net);">Client-Server</div>
+					<div class="ts-items">
+						One authoritative server; clients send input, receive state<br>
+						Server validates everything — anti-cheat built in<br>
+						Scales to many players<br>
+						Client sees delayed state; needs prediction<br>
+						Server costs money to run<br>
+						<em>Used by: FPS, MMOs, most competitive games</em>
+					</div>
+				</div>
+				<div class="tradeoff-side bg-script">
+					<div class="ts-label" style="color:var(--c-script);">Peer-to-Peer</div>
+					<div class="ts-items">
+						All peers run the same simulation<br>
+						No server cost<br>
+						Latency = worst connection in the group<br>
+						Trust problem — every peer can cheat<br>
+						Hard to scale beyond ~8 players<br>
+						<em>Used by: fighting games, RTS, co-op</em>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>State synchronization strategies</h2>
+			<p>The core question: how do multiple machines agree on the game state when messages take time to arrive?</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Strategy</th>
+						<th>How it works</th>
+						<th>Latency feel</th>
+						<th>Typical genre</th>
+					</tr>
+					<tr>
+						<td style="color:var(--c-net); font-weight:600;">Lockstep</td>
+						<td>All peers exchange inputs for tick N; nobody advances until all inputs arrive. Same inputs → same result
+							(deterministic simulation).
+						</td>
+						<td>Input delay = round-trip latency. Consistent but sluggish.</td>
+						<td>RTS (StarCraft), some fighting games</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-mem); font-weight:600;">Rollback</td>
+						<td>Run simulation locally with predicted inputs. When real inputs arrive, if they differ, <em>rewind</em>
+							to that tick and resimulate forward. Requires determinism + fast re-execution.
+						</td>
+						<td>Zero perceived input lag locally. Occasional "rollback jitter" when predictions are wrong.</td>
+						<td>Fighting games (GGPO), some shooters</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-core); font-weight:600;">Server authority + client prediction</td>
+						<td>Client simulates its own movement immediately (prediction). Server runs the authoritative sim. If server
+							disagrees, client corrects (reconciliation). Other players are interpolated between known server
+							snapshots.
+						</td>
+						<td>Own character feels responsive; others are slightly behind (interpolation delay).</td>
+						<td>FPS (Quake, Overwatch, Valorant), action games</td>
+					</tr>
+					<tr>
+						<td style="color:var(--c-phys); font-weight:600;">State broadcast</td>
+						<td>Server periodically sends full or delta state snapshots to all clients. Clients interpolate/extrapolate
+							between snapshots.
+						</td>
+						<td>Simple but high bandwidth. Smooth for slow-moving games.</td>
+						<td>MMOs, simulation games, casual multiplayer</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Client prediction & reconciliation</h2>
+			<p>This is the most important pattern in real-time multiplayer and worth understanding at a conceptual level:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">The prediction/reconciliation loop</div>
+				<div style="font-family:var(--mono); font-size:12px; line-height: 2.4; padding: 4px 0;">
+					<div><span style="color:var(--c-net);">1.</span> <span style="color:var(--c-net);">Client</span> <span
+						style="color:var(--text-xdim);">processes input locally, advances own state immediately (feels responsive)</span>
+					</div>
+					<div><span style="color:var(--c-net);">2.</span> <span style="color:var(--c-net);">Client</span> <span
+						style="color:var(--text-xdim);">sends input + tick number to server</span></div>
+					<div><span style="color:var(--c-core);">3.</span> <span style="color:var(--c-core);">Server</span> <span
+						style="color:var(--text-xdim);">applies input to authoritative state, sends back confirmed state for that tick</span>
+					</div>
+					<div><span style="color:var(--c-net);">4.</span> <span style="color:var(--c-net);">Client</span> <span
+						style="color:var(--text-xdim);">receives server state for tick N. Compares with its own predicted state at tick N.</span>
+					</div>
+					<div style="padding-left:20px;"><span style="color:var(--c-render);">Match?</span> <span
+						style="color:var(--text-xdim);">→ Prediction was correct. Discard saved state, continue.</span></div>
+					<div style="padding-left:20px;"><span style="color:var(--c-core);">Mismatch?</span> <span
+						style="color:var(--text-xdim);">→ Snap to server state, re-apply all inputs from tick N+1 to current tick. This is <strong>reconciliation</strong>.</span>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					The client keeps a buffer of recent unconfirmed inputs. On mismatch, it replays them on top of the corrected
+					server state. The result: the player's own character moves immediately and stays consistent with the server.
+				</div>
+			</div>
+
+			<div class="callout">
+				<strong>Entity interpolation:</strong> other players' positions arrive as server snapshots with network jitter.
+				Rather than applying them immediately (jerky), the client renders them slightly in the past and smoothly
+				interpolates between the two most recent known positions. This adds ~half a tick of visual delay but eliminates
+				jitter.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Transport: TCP vs UDP</h2>
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Protocol</th>
+						<th>Guarantees</th>
+						<th>Game use</th>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">TCP</td>
+						<td>Ordered, reliable delivery. Retransmits lost packets.</td>
+						<td>Chat, matchmaking, inventory, login. <em>Not</em> real-time state — a lost packet stalls everything
+							behind it (head-of-line blocking).
+						</td>
+					</tr>
+					<tr>
+						<td style="font-weight:600;">UDP</td>
+						<td>None. Packets may arrive out of order, duplicated, or not at all.</td>
+						<td>Real-time state sync. The game builds its own reliability layer on top — selective acks, redundancy,
+							sequence numbers.
+						</td>
+					</tr>
+				</table>
+			</div>
+			<p>Most game networking stacks use <strong>UDP with a custom reliability layer</strong>: unreliable-unordered for
+				position updates (stale data is useless — just use the latest), reliable-ordered for critical events (kills,
+				item pickups, chat). Libraries like ENet, GameNetworkingSockets, and Laminar implement this pattern.</p>
+		</div>
+
+		<div class="section">
+			<h2>Go deeper</h2>
+			<div class="deep-list">
+				<span class="deep-tag">Quake/Source networking model</span>
+				<span class="deep-tag">GGPO / rollback netcode</span>
+				<span class="deep-tag">Snapshot interpolation (Fiedler)</span>
+				<span class="deep-tag">Delta compression</span>
+				<span class="deep-tag">NAT traversal / hole punching</span>
+				<span class="deep-tag">Dedicated server architecture</span>
+				<span class="deep-tag">Interest management (area of interest)</span>
+				<span class="deep-tag">Deterministic simulation</span>
+			</div>
+		</div>
+	</div>
+
+</div>
+
+<script>
+	// Tab switching
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
