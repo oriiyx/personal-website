@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>The Game Engine Toolkit — SDL3 · OpenGL · stb · Lua</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+          /* Per-technology color coding */
+          --sdl: #e8883a;
+          --gl: #4dc462;
+          --stb: #3d9be8;
+          --lua: #e8b834;
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      .page {
+          max-width: 1080px;
+          margin: 0 auto;
+          padding: 48px 24px 100px;
+      }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      /* ── Tabs ── */
+      .tab-bar {
+          display: flex;
+          gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          justify-content: center;
+      }
+
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+
+      .tab-btn:hover {
+          color: var(--text);
+          background: var(--surface2);
+      }
+
+      .tab-btn.active {
+          color: #fff;
+          background: var(--accent);
+      }
+
+      .tab-panel { display: none; }
+
+      .tab-panel.active {
+          display: block;
+          animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* ── Prose ── */
+      .section {
+          margin-bottom: 40px;
+      }
+
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .section p { margin-bottom: 14px; }
+      .section p:last-child { margin-bottom: 0; }
+
+      strong { color: var(--text-b); font-weight: 600; }
+
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      /* ── Diagrams ── */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* ── Callout ── */
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+
+      .callout.info {
+          background: rgba(61, 155, 232, 0.06);
+          border-color: rgba(61, 155, 232, 0.14);
+      }
+
+      /* ── Table ── */
+      .tbl-wrap {
+          overflow-x: auto;
+          margin: 16px 0;
+      }
+
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+      }
+
+      tr:last-child td { border-bottom: none; }
+
+      /* ── Code block ── */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+      }
+
+      .codeblock .kw { color: var(--accent2); }
+      .codeblock .cm { color: var(--text-dim); font-style: italic; }
+      .codeblock .str { color: var(--gl); }
+      .codeblock .num { color: var(--lua); }
+      .codeblock .fn { color: var(--stb); }
+      .codeblock .pp { color: var(--sdl); }
+
+      /* ── Layer diagram ── */
+      .layer-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+          margin: 16px 0;
+      }
+
+      .layer {
+          display: flex;
+          align-items: center;
+          border-radius: 6px;
+          padding: 10px 16px;
+          font-family: var(--mono);
+          font-size: 12px;
+          gap: 12px;
+      }
+
+      .layer .l-tag {
+          font-size: 9px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          width: 90px;
+          flex-shrink: 0;
+          opacity: 0.7;
+      }
+
+      .layer .l-desc {
+          font-family: var(--serif);
+          font-size: 13px;
+          color: var(--text);
+          opacity: 0.85;
+      }
+
+      .layer.l-lua {
+          background: rgba(232, 184, 52, 0.08);
+          border: 1px solid rgba(232, 184, 52, 0.15);
+          color: var(--lua);
+      }
+      .layer.l-sdl {
+          background: rgba(232, 136, 58, 0.08);
+          border: 1px solid rgba(232, 136, 58, 0.15);
+          color: var(--sdl);
+      }
+      .layer.l-gl {
+          background: rgba(77, 196, 98, 0.08);
+          border: 1px solid rgba(77, 196, 98, 0.15);
+          color: var(--gl);
+      }
+      .layer.l-stb {
+          background: rgba(61, 155, 232, 0.08);
+          border: 1px solid rgba(61, 155, 232, 0.15);
+          color: var(--stb);
+      }
+      .layer.l-os {
+          background: rgba(92, 99, 128, 0.08);
+          border: 1px solid rgba(92, 99, 128, 0.15);
+          color: var(--text-dim);
+      }
+
+      /* ── Subsystem grid ── */
+      .sub-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+          gap: 8px;
+          margin: 16px 0;
+      }
+
+      .sub-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 14px 16px;
+          transition: border-color 0.15s;
+      }
+
+      .sub-card:hover { border-color: var(--border-hi); }
+
+      .sub-card .sc-name {
+          font-family: var(--mono);
+          font-size: 12px;
+          font-weight: 600;
+          margin-bottom: 6px;
+      }
+
+      .sub-card .sc-desc {
+          font-size: 13px;
+          color: var(--text-dim);
+          line-height: 1.5;
+      }
+
+      /* ── Flow arrow ── */
+      .flow-arrow {
+          text-align: center;
+          color: var(--text-xdim);
+          font-size: 16px;
+          padding: 4px 0;
+          font-family: var(--mono);
+      }
+
+      /* ── Inline colored labels ── */
+      .c-sdl { color: var(--sdl); }
+      .c-gl { color: var(--gl); }
+      .c-stb { color: var(--stb); }
+      .c-lua { color: var(--lua); }
+      .c-accent { color: var(--accent2); }
+
+      /* ── Resources ── */
+      .resources {
+          margin: 20px 0;
+      }
+
+      .res-item {
+          display: flex;
+          gap: 12px;
+          align-items: baseline;
+          padding: 8px 0;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .res-item:last-child { border-bottom: none; }
+
+      .res-idx {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 700;
+          color: var(--text-xdim);
+          width: 20px;
+          flex-shrink: 0;
+      }
+
+      .res-body .res-title {
+          font-family: var(--mono);
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-b);
+          margin-bottom: 2px;
+      }
+
+      .res-body .res-url {
+          font-family: var(--mono);
+          font-size: 10px;
+          color: var(--accent2);
+          word-break: break-all;
+      }
+
+      .res-body .res-note {
+          font-size: 13px;
+          color: var(--text-dim);
+          line-height: 1.5;
+          margin-top: 2px;
+      }
+
+      @media (max-width: 640px) {
+          .tab-btn { font-size: 10px; padding: 7px 10px; }
+          .layer .l-tag { width: 60px; font-size: 8px; }
+          .sub-grid { grid-template-columns: 1fr; }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<div class="page-header">
+		<h1>the game engine toolkit</h1>
+		<div class="sub">SDL3 · OpenGL · stb · Lua/LuaJIT — the C ecosystem for building engines from scratch</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="sdl">SDL3</button>
+		<button class="tab-btn" data-tab="opengl">OpenGL</button>
+		<button class="tab-btn" data-tab="stb">stb</button>
+		<button class="tab-btn" data-tab="lua">Lua / LuaJIT</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: SDL3                                       -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-sdl">
+
+		<div class="section">
+			<h2>What SDL is and isn't</h2>
+
+			<p><strong>SDL (Simple DirectMedia Layer)</strong> is a cross-platform C library that gives you a single, portable API for the things an OS does differently everywhere: creating windows, handling input, managing audio devices, accessing the GPU, reading gamepads, and dealing with file I/O. It's the <em>platform abstraction layer</em> your engine sits on top of.</p>
+
+			<p>SDL is <strong>not</strong> a game engine, not a renderer, and not a framework that structures your game for you. It doesn't have a scene graph, an entity system, or a physics pipeline. It opens the door to the OS so you can build those things yourself. Think of it as the portable <code>main()</code> — it replaces a hundred <code>#ifdef _WIN32</code> blocks with one clean API.</p>
+		</div>
+
+		<div class="section">
+			<h2>Why SDL3 specifically</h2>
+
+			<p>SDL3 is the first major version bump since 2013. The API was rethought, not just patched. The biggest changes: the audio subsystem was redesigned from scratch around audio streams instead of callbacks, the GPU API is entirely new (a portable abstraction over Vulkan/Metal/D3D12), properties replaced the old hint system, and the main loop can now use a callback model that works properly on mobile and web targets.</p>
+
+			<p>SDL3 was released as v3.2.0 in January 2025. The satellite libraries (SDL_image, SDL_ttf) are stable; SDL_mixer is the last one pending a stable release. Porting from SDL2 is relatively straightforward — the concepts are the same, the function signatures shifted.</p>
+
+			<div class="callout">
+				<strong>The callback main loop.</strong> SDL3 introduces <code>SDL_AppInit</code>, <code>SDL_AppIterate</code>, <code>SDL_AppEvent</code>, and <code>SDL_AppQuit</code> as an alternative to the traditional <code>while(running)</code> loop. This model is essential for platforms like iOS, Android, and Emscripten where the OS owns the run loop and your code must yield between frames.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>What SDL3 manages for your engine</h2>
+
+			<div class="sub-grid">
+				<div class="sub-card">
+					<div class="sc-name" style="color:var(--sdl);">Window + Context</div>
+					<div class="sc-desc">Create windows, manage GL/Vulkan/Metal contexts, handle Hi-DPI, multi-monitor, fullscreen toggling.</div>
+				</div>
+				<div class="sub-card">
+					<div class="sc-name" style="color:var(--sdl);">Input</div>
+					<div class="sc-desc">Keyboard, mouse, touch, gamepad, pen/tablet. Unified event queue. Rumble, LED, touchpad on modern controllers.</div>
+				</div>
+				<div class="sub-card">
+					<div class="sc-name" style="color:var(--sdl);">Audio</div>
+					<div class="sc-desc">Audio streams with automatic resampling and format conversion. Logical devices that survive hardware changes (unplug headphones → auto-migrate).</div>
+				</div>
+				<div class="sub-card">
+					<div class="sc-name" style="color:var(--sdl);">GPU API</div>
+					<div class="sc-desc">New in SDL3. Portable abstraction over Vulkan, Metal, D3D12. Shader cross-compilation. An alternative to using raw OpenGL or Vulkan directly.</div>
+				</div>
+				<div class="sub-card">
+					<div class="sc-name" style="color:var(--sdl);">Filesystem + I/O</div>
+					<div class="sc-desc">Platform-correct paths for save data, preferences, app bundles. Async I/O streams. Native file dialogs.</div>
+				</div>
+				<div class="sub-card">
+					<div class="sc-name" style="color:var(--sdl);">Timers + Threads</div>
+					<div class="sc-desc">High-resolution counters, mutexes, semaphores, condition variables, atomics, TLS. Enough to build a job system on top.</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Where SDL sits in the stack</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">Typical engine layering</div>
+				<div class="layer-stack">
+					<div class="layer l-lua">
+						<div class="l-tag">Scripting</div>
+						<div class="l-desc">Lua/LuaJIT — gameplay logic, entity behaviors, UI</div>
+					</div>
+					<div class="flow-arrow">↕</div>
+					<div class="layer l-gl">
+						<div class="l-tag">Renderer</div>
+						<div class="l-desc">OpenGL / Vulkan / SDL GPU — draw commands, shaders, state</div>
+					</div>
+					<div class="flow-arrow">↕</div>
+					<div class="layer l-stb">
+						<div class="l-tag">Asset I/O</div>
+						<div class="l-desc">stb_image, stb_truetype, stb_vorbis — decode files into raw data</div>
+					</div>
+					<div class="flow-arrow">↕</div>
+					<div class="layer l-sdl">
+						<div class="l-tag">Platform</div>
+						<div class="l-desc">SDL3 — window, input, audio device, context, filesystem, threads</div>
+					</div>
+					<div class="flow-arrow">↕</div>
+					<div class="layer l-os">
+						<div class="l-tag">OS / HW</div>
+						<div class="l-desc">Win32, Cocoa, X11/Wayland, Android NDK, iOS UIKit, Emscripten</div>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					SDL is the bottom of <em>your</em> code. Everything above it is your engine; everything below it is the OS. The renderer (OpenGL) talks to SDL for context creation, stb loads assets from files SDL opens, and Lua scripts drive logic that ultimately produces SDL events and draw calls.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The SDL + OpenGL relationship</h2>
+
+			<p>If you're using OpenGL for rendering (rather than SDL's own GPU API), SDL's role is to create the window, create the OpenGL context, and swap buffers. Everything between <code>SDL_GL_CreateContext</code> and <code>SDL_GL_SwapWindow</code> is pure OpenGL — SDL steps aside. You still need SDL for input and audio during that frame, but the rendering pipeline is OpenGL's territory.</p>
+
+			<div class="codeblock"><span class="cm">// Minimal SDL3 + OpenGL setup (pseudocode)</span>
+SDL_Init(SDL_INIT_VIDEO);
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, <span class="num">3</span>);
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, <span class="num">3</span>);
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+
+SDL_Window *win = SDL_CreateWindow(<span class="str">"engine"</span>, <span class="num">1280</span>, <span class="num">720</span>, SDL_WINDOW_OPENGL);
+SDL_GLContext ctx = SDL_GL_CreateContext(win);
+
+<span class="cm">// --- everything here is OpenGL ---</span>
+<span class="cm">// glClear, glDrawArrays, shader programs, etc.</span>
+
+SDL_GL_SwapWindow(win);  <span class="cm">// present the frame</span></div>
+		</div>
+
+		<div class="section">
+			<h2>Resources</h2>
+			<div class="resources">
+				<div class="res-item">
+					<div class="res-idx">01</div>
+					<div class="res-body">
+						<div class="res-title">SDL Wiki — Official API Documentation & Examples</div>
+						<div class="res-url">https://wiki.libsdl.org/SDL3</div>
+						<div class="res-note">The canonical reference. The examples site (examples.libsdl.org) has 100–300 line C programs demonstrating each subsystem, runnable in the browser.</div>
+					</div>
+				</div>
+				<div class="res-item">
+					<div class="res-idx">02</div>
+					<div class="res-body">
+						<div class="res-title">Lazy Foo' — SDL3 Tutorials</div>
+						<div class="res-url">https://lazyfoo.net/tutorials/SDL3/index.php</div>
+						<div class="res-note">The classic SDL tutorial series, updated for SDL3. Step-by-step from window creation through textures, events, and game loops. Pre-alpha but substantive.</div>
+					</div>
+				</div>
+				<div class="res-item">
+					<div class="res-idx">03</div>
+					<div class="res-body">
+						<div class="res-title">Glusoft — SDL3 Tutorials</div>
+						<div class="res-url">https://glusoft.com/sdl3-tutorials/</div>
+						<div class="res-note">Code-heavy tutorials covering both basic setup and advanced topics. Focuses on what's new in SDL3 vs SDL2, with working examples on Windows and macOS.</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: OPENGL                                     -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-opengl">
+
+		<div class="section">
+			<h2>What OpenGL actually is</h2>
+
+			<p>OpenGL is a <strong>specification</strong>, not a library. The Khronos Group defines what each function should do and what the output must be; GPU vendors (NVIDIA, AMD, Intel, Apple) write the actual implementation inside their drivers. Your code calls <code>glDrawArrays()</code>; the driver translates that into hardware-specific commands for the GPU sitting in the machine. You never link against "the OpenGL library" — you link against the driver's implementation of the spec.</p>
+
+			<p>This is why OpenGL behaves differently on different hardware, why driver bugs exist, and why you sometimes need a loader library (like GLAD or GLEW) to resolve the actual function pointers at runtime — the OS doesn't expose the modern functions by default.</p>
+		</div>
+
+		<div class="section">
+			<h2>Core profile vs. immediate mode</h2>
+
+			<p>OpenGL has two personalities. The <strong>legacy/immediate mode</strong> (pre-3.0) let you throw vertices at the GPU one by one with <code>glBegin</code>/<code>glEnd</code>. It was simple but horrifyingly slow — each call crossed the CPU→GPU boundary. The <strong>core profile</strong> (3.3+) removed all of that and requires you to batch geometry into GPU-side buffers, write your own shaders, and manage the pipeline yourself.</p>
+
+			<p>Core profile 3.3 is the standard teaching target. All features from 3.3 forward are additive — later versions (up to 4.6) add things like compute shaders, tessellation, and bindless textures, but the foundational model doesn't change. If you learn 3.3, everything above it is incremental.</p>
+
+			<div class="callout warn">
+				<strong>The "dead API" question.</strong> OpenGL is not getting new versions. Vulkan is its successor for new development. Apple deprecated OpenGL on macOS/iOS. But OpenGL remains the most pragmatic choice for learning GPU programming from scratch: it has vastly more educational material, a gentler learning curve, and it runs on essentially every desktop GPU and driver in existence. You can always move to Vulkan or SDL's GPU API later — the concepts (shaders, buffers, pipelines, draw calls) transfer directly.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The rendering pipeline</h2>
+
+			<p>Every frame, your CPU-side code uploads geometry and uniforms, then tells the GPU to draw. The GPU processes vertices through a fixed sequence of stages. Two of these stages are <strong>programmable</strong> (you write the code — these are shaders); the rest are <strong>fixed-function</strong> (the GPU handles them with configurable parameters).</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Simplified OpenGL pipeline</div>
+
+				<div class="layer-stack" style="gap: 2px;">
+					<div class="layer l-gl" style="justify-content:center;">
+						<div class="l-tag" style="width:auto;">CPU</div>
+						<div class="l-desc">Vertex data + uniforms → <code>glDrawArrays()</code></div>
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="layer" style="background:rgba(77,196,98,0.14); border:1px solid rgba(77,196,98,0.25); color:var(--gl);">
+						<div class="l-tag" style="width:auto;">Programmable</div>
+						<div class="l-desc"><strong>Vertex Shader</strong> — runs per-vertex. Transforms positions from model space → clip space (MVP matrix). Passes data to next stage.</div>
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="layer l-os">
+						<div class="l-tag" style="width:auto;">Fixed</div>
+						<div class="l-desc"><strong>Primitive Assembly + Rasterization</strong> — connects vertices into triangles, clips to screen, converts to fragments (candidate pixels).</div>
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="layer" style="background:rgba(77,196,98,0.14); border:1px solid rgba(77,196,98,0.25); color:var(--gl);">
+						<div class="l-tag" style="width:auto;">Programmable</div>
+						<div class="l-desc"><strong>Fragment Shader</strong> — runs per-fragment. Computes final color using lighting, textures, and material properties.</div>
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="layer l-os">
+						<div class="l-tag" style="width:auto;">Fixed</div>
+						<div class="l-desc"><strong>Depth test + Blending + Write</strong> — discards occluded fragments, blends transparent ones, writes to framebuffer.</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					The vertex shader and fragment shader are the two stages you write in GLSL (OpenGL Shading Language). Everything else is configured through state-setting functions like <code>glEnable(GL_DEPTH_TEST)</code>, <code>glBlendFunc()</code>, etc.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The core objects</h2>
+
+			<p>Modern OpenGL is built around a handful of named objects that you create, configure, bind, and draw with. Understanding what each one holds is the entire mental model.</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Object</th>
+						<th>What it holds</th>
+						<th>Purpose</th>
+					</tr>
+					<tr>
+						<td><code>VBO</code></td>
+						<td>Raw vertex data on the GPU</td>
+						<td>Positions, normals, UVs, colors — stored as a flat byte buffer. You define the layout; the GPU doesn't know what's in it until you tell it.</td>
+					</tr>
+					<tr>
+						<td><code>EBO</code></td>
+						<td>Index data</td>
+						<td>An array of integer indices into the VBO. Lets you reuse vertices (e.g., a cube has 8 unique positions but 36 indices for 12 triangles).</td>
+					</tr>
+					<tr>
+						<td><code>VAO</code></td>
+						<td>Vertex attribute configuration</td>
+						<td>Records <em>how</em> to interpret the VBO: which bytes are positions, which are normals, their types, strides, offsets. Bind it once, draw many times.</td>
+					</tr>
+					<tr>
+						<td><code>Shader Program</code></td>
+						<td>Compiled GPU code</td>
+						<td>A linked pair of vertex + fragment shaders (written in GLSL). Uploaded to the GPU, selected before drawing.</td>
+					</tr>
+					<tr>
+						<td><code>Texture</code></td>
+						<td>Image data on the GPU</td>
+						<td>A 2D (or 3D, cubemap, array) image that shaders sample from. This is where stb_image's output ends up.</td>
+					</tr>
+					<tr>
+						<td><code>FBO</code></td>
+						<td>Render target</td>
+						<td>A framebuffer you draw into instead of the screen. Used for post-processing, shadow maps, deferred rendering.</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The state machine model</h2>
+
+			<p>OpenGL is a <strong>global state machine</strong>. When you call <code>glBindTexture(GL_TEXTURE_2D, myTex)</code>, you're not passing a texture to a draw call — you're setting the "current 2D texture" slot in a global context. The next draw call will use whatever's currently bound. This is the single biggest source of bugs for newcomers: forgetting to unbind something, or binding in the wrong order. The VAO exists partly to alleviate this — it captures vertex-attribute state so you don't have to re-specify it every frame.</p>
+		</div>
+
+		<div class="section">
+			<h2>Resources</h2>
+			<div class="resources">
+				<div class="res-item">
+					<div class="res-idx">01</div>
+					<div class="res-body">
+						<div class="res-title">LearnOpenGL — Joey de Vries</div>
+						<div class="res-url">https://learnopengl.com</div>
+						<div class="res-note">The definitive modern OpenGL tutorial. Covers core profile 3.3 from window creation through PBR, shadow mapping, and deferred rendering. Clear explanations, working code, interactive function references. Start here.</div>
+					</div>
+				</div>
+				<div class="res-item">
+					<div class="res-idx">02</div>
+					<div class="res-body">
+						<div class="res-title">open.gl — Alexander Overvoorde</div>
+						<div class="res-url">https://open.gl</div>
+						<div class="res-note">A concise, beginner-friendly guide focused on modern OpenGL only. Interactive examples in the browser. Good complement to LearnOpenGL for a second perspective.</div>
+					</div>
+				</div>
+				<div class="res-item">
+					<div class="res-idx">03</div>
+					<div class="res-body">
+						<div class="res-title">OGLdev — OpenGL Step by Step</div>
+						<div class="res-url">https://ogldev.org</div>
+						<div class="res-note">Tutorial series covering modern OpenGL with a game-engine slant. Deeper on topics like skeletal animation, deferred shading, and shadow mapping techniques.</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: stb                                        -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-stb">
+
+		<div class="section">
+			<h2>The philosophy</h2>
+
+			<p><strong>stb</strong> is a collection of single-file, public-domain C libraries by Sean Barrett (nothings.org). The core idea: one <code>.h</code> file per library, no build system, no dependencies, no configuration — just drop it into your project and go. Each library solves one specific problem (loading images, rasterizing fonts, decoding audio) with a minimal, C-native API designed for game developers who want to avoid heavyweight dependencies.</p>
+
+			<p>The "stb style" has become its own design pattern in the C ecosystem. The libraries are intentionally limited in scope — stb_image doesn't try to support every obscure image format, and stb_truetype doesn't try to be a full text layout engine. They cover the 90% case cleanly and leave edge cases to specialized libraries. For an engine built from scratch, this is exactly the right tradeoff: you get working asset loading in minutes, not days.</p>
+		</div>
+
+		<div class="section">
+			<h2>The implementation macro pattern</h2>
+
+			<p>Every stb library uses a two-mode include. By default, including the header gives you only <strong>declarations</strong> (function prototypes, types). To generate the actual <strong>implementation</strong> (the compiled code), you define a macro before the include in exactly <em>one</em> source file:</p>
+
+			<div class="codeblock"><span class="cm">// In every file that needs the API — just declarations</span>
+<span class="pp">#include</span> <span class="str">"stb_image.h"</span>
+
+<span class="cm">// In exactly ONE .c file — generates the implementation</span>
+<span class="pp">#define STB_IMAGE_IMPLEMENTATION</span>
+<span class="pp">#include</span> <span class="str">"stb_image.h"</span></div>
+
+			<p>If you define the implementation macro in more than one translation unit, you get duplicate symbol errors at link time. The common practice is to create a dedicated file (e.g., <code>stb_impls.c</code>) that defines all your stb implementations in one place — you never edit it, so recompilation is rare.</p>
+		</div>
+
+		<div class="section">
+			<h2>The libraries you'll actually use</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Library</th>
+						<th>What it does</th>
+						<th>Engine role</th>
+					</tr>
+					<tr>
+						<td><code style="color:var(--stb);">stb_image.h</code></td>
+						<td>Decodes JPEG, PNG, BMP, GIF, HDR, PSD, TGA, PIC, PNM from file or memory into a flat pixel buffer</td>
+						<td>Texture loading. Output goes directly into <code>glTexImage2D()</code>. Handles format detection, channel conversion, and 8/16/float bit depths.</td>
+					</tr>
+					<tr>
+						<td><code style="color:var(--stb);">stb_image_write.h</code></td>
+						<td>Writes PNG, BMP, TGA, JPG from a pixel buffer</td>
+						<td>Screenshots, debug texture export, baking generated textures to disk.</td>
+					</tr>
+					<tr>
+						<td><code style="color:var(--stb);">stb_truetype.h</code></td>
+						<td>Rasterizes TrueType fonts into bitmaps</td>
+						<td>Font atlas generation for your text rendering system. Outputs alpha bitmaps you upload as textures.</td>
+					</tr>
+					<tr>
+						<td><code style="color:var(--stb);">stb_image_resize2.h</code></td>
+						<td>High-quality image resizing with multiple filter types</td>
+						<td>Mipmap generation, thumbnail creation, texture atlas packing.</td>
+					</tr>
+					<tr>
+						<td><code style="color:var(--stb);">stb_vorbis.c</code></td>
+						<td>Decodes Ogg Vorbis audio</td>
+						<td>Music/SFX loading. Outputs PCM samples you feed to SDL's audio streams.</td>
+					</tr>
+					<tr>
+						<td><code style="color:var(--stb);">stb_rect_pack.h</code></td>
+						<td>Packs rectangles into an atlas</td>
+						<td>Sprite atlas packing, font atlas layout. Pairs with stb_truetype for glyph packing.</td>
+					</tr>
+					<tr>
+						<td><code style="color:var(--stb);">stb_ds.h</code></td>
+						<td>Dynamic arrays and hash maps for C</td>
+						<td>General-purpose data structures when you need a stretchy buffer or a hash table without writing your own.</td>
+					</tr>
+					<tr>
+						<td><code style="color:var(--stb);">stb_perlin.h</code></td>
+						<td>Perlin/simplex noise</td>
+						<td>Procedural terrain, texture generation, particle effects.</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Customization hooks</h2>
+
+			<p>Most stb libraries let you override memory allocation and assertions by defining macros <em>before</em> the implementation include. This is critical for engines that use custom allocators (arena allocators, pool allocators, tracked allocators for leak detection):</p>
+
+			<div class="codeblock"><span class="pp">#define</span> STBI_MALLOC(sz)        my_alloc(sz)
+<span class="pp">#define</span> STBI_REALLOC(p, newsz) my_realloc(p, newsz)
+<span class="pp">#define</span> STBI_FREE(p)           my_free(p)
+<span class="pp">#define</span> STBI_ASSERT(x)         my_assert(x)
+<span class="pp">#define</span> STB_IMAGE_IMPLEMENTATION
+<span class="pp">#include</span> <span class="str">"stb_image.h"</span></div>
+
+			<div class="callout info">
+				<strong>stb_image + OpenGL in practice.</strong> The typical flow: call <code>stbi_load()</code> to get a pixel buffer + dimensions + channel count → call <code>glGenTextures</code> / <code>glBindTexture</code> / <code>glTexImage2D</code> to upload it → call <code>stbi_image_free()</code> to release the CPU-side copy. Five function calls to go from a PNG on disk to a texture on the GPU.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Resources</h2>
+			<div class="resources">
+				<div class="res-item">
+					<div class="res-idx">01</div>
+					<div class="res-body">
+						<div class="res-title">nothings/stb — GitHub Repository</div>
+						<div class="res-url">https://github.com/nothings/stb</div>
+						<div class="res-note">The source. Each header file's comment block is its own documentation — start reading from the top of <code>stb_image.h</code>. The <code>docs/stb_howto.txt</code> file explains the single-header design philosophy.</div>
+					</div>
+				</div>
+				<div class="res-item">
+					<div class="res-idx">02</div>
+					<div class="res-body">
+						<div class="res-title">3D Graphics Rendering Cookbook — Chapter 2: Using STB</div>
+						<div class="res-url">https://subscription.packtpub.com/book/game-development/9781838986193</div>
+						<div class="res-note">Walks through integrating stb_image with OpenGL for texture loading, including HDR image loading for PBR light probes. Practical, engine-oriented context.</div>
+					</div>
+				</div>
+				<div class="res-item">
+					<div class="res-idx">03</div>
+					<div class="res-body">
+						<div class="res-title">DeepWiki — nothings/stb Overview</div>
+						<div class="res-url">https://deepwiki.com/nothings/stb</div>
+						<div class="res-note">Auto-generated but well-organized documentation covering each library's architecture, the implementation macro pattern, and usage examples with diagrams.</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: LUA / LUAJIT                               -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-lua">
+
+		<div class="section">
+			<h2>Why engines embed a scripting language</h2>
+
+			<p>Your engine's core — the renderer, the physics, the memory allocator — is C or C++. It needs to be fast, it needs to be predictable, and it compiles slowly. Now imagine every time a designer wants to tweak an enemy's patrol behavior, they have to recompile the engine. Or every time you want to test a new dialogue tree, you wait 30 seconds for a build.</p>
+
+			<p>A scripting language decouples <strong>behavior</strong> from <strong>infrastructure</strong>. The C side provides the fast, stable subsystems. The script side describes what happens in the game — and it reloads in milliseconds, without recompiling anything. This is the same split that Unity uses (C++ engine / C# scripts) and that World of Warcraft uses (C++ engine / Lua UI and addon system).</p>
+		</div>
+
+		<div class="section">
+			<h2>Why Lua specifically</h2>
+
+			<p>Lua was <em>designed from the ground up</em> to be embedded into C applications. That's not a secondary use case — it's the primary one. The entire interpreter is about 300KB and compiles as part of your project with no external dependencies. The C API is a clean stack-based interface: you push values onto a stack, call Lua functions, and pop results back. No heavy runtime, no GIL, no framework overhead.</p>
+
+			<p>Compared to alternatives: Python is enormous and has the GIL; JavaScript requires V8 or a similar heavyweight runtime; C# requires Mono or .NET. Lua's embedding story is unmatched in simplicity and size.</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Property</th>
+						<th>Lua 5.4</th>
+						<th>LuaJIT</th>
+					</tr>
+					<tr>
+						<td>Runtime size</td>
+						<td>~300KB</td>
+						<td>~500KB</td>
+					</tr>
+					<tr>
+						<td>Language version</td>
+						<td>Lua 5.4 (latest)</td>
+						<td>Lua 5.1 (frozen)</td>
+					</tr>
+					<tr>
+						<td>Execution</td>
+						<td>Bytecode interpreter</td>
+						<td>JIT compiler → native machine code</td>
+					</tr>
+					<tr>
+						<td>Performance</td>
+						<td>Fast for an interpreter</td>
+						<td>10–50× faster; approaches C speed in hot paths</td>
+					</tr>
+					<tr>
+						<td>FFI</td>
+						<td>Stack-based C API only</td>
+						<td>Built-in FFI: call C functions directly from Lua, no bindings needed</td>
+					</tr>
+					<tr>
+						<td>Tradeoff</td>
+						<td>Latest language features (integers, generational GC)</td>
+						<td>Raw speed + FFI, but stuck on 5.1 syntax</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>The LuaJIT FFI is the killer feature for engines.</strong> Instead of writing tedious C-side binding functions for every engine API you want to expose to scripts, you declare C function signatures in Lua and call them directly. The JIT compiler inlines these calls — there's no marshalling overhead. This is why engines like Defold, CryEngine, and many custom engines choose LuaJIT over vanilla Lua.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The C API: how embedding works</h2>
+
+			<p>All communication between your C engine and Lua scripts goes through a <strong>virtual stack</strong>. You push arguments onto the stack, call a function, and pop the results. It's low-level but explicit — there's no hidden magic, and every operation has a predictable cost.</p>
+
+			<div class="codeblock"><span class="cm">// Create a Lua state, load standard libraries</span>
+lua_State *L = luaL_newstate();
+luaL_openlibs(L);
+
+<span class="cm">// Register a C function that Lua scripts can call</span>
+<span class="kw">static int</span> <span class="fn">l_get_player_hp</span>(lua_State *L) {
+    lua_pushnumber(L, player.hp);  <span class="cm">// push result onto stack</span>
+    <span class="kw">return</span> <span class="num">1</span>;                     <span class="cm">// number of return values</span>
+}
+lua_register(L, <span class="str">"get_player_hp"</span>, l_get_player_hp);
+
+<span class="cm">// Load and run a script file</span>
+luaL_dofile(L, <span class="str">"scripts/enemy_ai.lua"</span>);
+
+<span class="cm">// Call a Lua function from C</span>
+lua_getglobal(L, <span class="str">"on_enemy_damaged"</span>);  <span class="cm">// push function</span>
+lua_pushnumber(L, enemy_id);            <span class="cm">// push arg 1</span>
+lua_pushnumber(L, damage);              <span class="cm">// push arg 2</span>
+lua_pcall(L, <span class="num">2</span>, <span class="num">0</span>, <span class="num">0</span>);                <span class="cm">// call with 2 args, 0 returns</span></div>
+
+			<p>With LuaJIT's FFI, the Lua side becomes even simpler — scripts can call your engine's C functions directly without you writing any binding code at all:</p>
+
+			<div class="codeblock"><span class="cm">-- LuaJIT FFI: declare and call C functions from Lua</span>
+<span class="kw">local</span> ffi = require(<span class="str">"ffi"</span>)
+ffi.cdef[[
+    <span class="kw">float</span> get_player_hp(<span class="kw">void</span>);
+    <span class="kw">void</span>  apply_damage(<span class="kw">int</span> entity_id, <span class="kw">float</span> amount);
+    <span class="kw">void</span>  spawn_particle(<span class="kw">float</span> x, <span class="kw">float</span> y, <span class="kw">int</span> type);
+]]
+
+<span class="cm">-- Call them as if they were Lua functions</span>
+<span class="kw">local</span> hp = ffi.C.get_player_hp()
+ffi.C.apply_damage(<span class="num">42</span>, <span class="num">10.5</span>)
+ffi.C.spawn_particle(player.x, player.y, PARTICLE_SPARK)</div>
+		</div>
+
+		<div class="section">
+			<h2>What to script vs. what to keep in C</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Keep in C/C++</th>
+						<th>Script in Lua</th>
+					</tr>
+					<tr>
+						<td>Render loop, draw calls, shader management</td>
+						<td>Entity behaviors, AI state machines, patrol routes</td>
+					</tr>
+					<tr>
+						<td>Physics step, collision detection, broadphase</td>
+						<td>Collision <em>responses</em> (what happens when things collide)</td>
+					</tr>
+					<tr>
+						<td>Audio mixing, streaming, DSP</td>
+						<td>Sound triggers, music transitions, ambient rules</td>
+					</tr>
+					<tr>
+						<td>Memory allocators, resource loading, file I/O</td>
+						<td>Level scripts, cutscenes, dialogue trees</td>
+					</tr>
+					<tr>
+						<td>Core math (matrix ops, spatial hashing)</td>
+						<td>Gameplay formulas, damage calculation, loot tables</td>
+					</tr>
+					<tr>
+						<td>Input polling, event dispatch</td>
+						<td>Input <em>mapping</em>, control rebinding, input combos</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>The rule of thumb: anything that runs thousands of times per frame stays in C. Anything that runs once per frame or per event — and that a designer might want to change — goes in Lua. The boundary between them is your engine's public C API: the set of functions you expose for scripts to call.</p>
+		</div>
+
+		<div class="section">
+			<h2>Hot reloading</h2>
+
+			<p>One of the biggest practical advantages of Lua in a game engine is <strong>hot reload</strong>. Because scripts are loaded and executed at runtime, you can re-run <code>luaL_dofile()</code> on a modified script without restarting the engine. The new behavior takes effect immediately — the designer changes a number, saves the file, and sees the result in the running game within a second. This feedback loop is what makes scripting worth the complexity of embedding.</p>
+		</div>
+
+		<div class="section">
+			<h2>Resources</h2>
+			<div class="resources">
+				<div class="res-item">
+					<div class="res-idx">01</div>
+					<div class="res-body">
+						<div class="res-title">Programming in Lua (4th edition) — Roberto Ierusalimschy</div>
+						<div class="res-url">https://www.lua.org/pil/</div>
+						<div class="res-note">The definitive Lua book, by the language's creator. The first edition is free online. Covers the language, the C API, and embedding patterns. Start with Part IV (The C API) for engine integration.</div>
+					</div>
+				</div>
+				<div class="res-item">
+					<div class="res-idx">02</div>
+					<div class="res-body">
+						<div class="res-title">LuaJIT Official Documentation — FFI Tutorial & Semantics</div>
+						<div class="res-url">https://luajit.org/ext_ffi_tutorial.html</div>
+						<div class="res-note">The FFI tutorial walks through calling C libraries from Lua, defining C structs, and managing memory. The FFI semantics page is the reference for how Lua↔C type conversions work.</div>
+					</div>
+				</div>
+				<div class="res-item">
+					<div class="res-idx">03</div>
+					<div class="res-body">
+						<div class="res-title">Lua 5.4 Reference Manual — The C API</div>
+						<div class="res-url">https://www.lua.org/manual/5.4/manual.html#4</div>
+						<div class="res-note">The official reference for every C API function: <code>lua_push*</code>, <code>lua_to*</code>, <code>lua_pcall</code>, the registry, userdata, metatables. Dense but complete. Use alongside PiL.</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+</div>
+
+<script>
+	// Tab switching
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
