@@ -927,40 +927,44 @@ SDL_GL_SwapWindow(win);  <span class="cm">// present the frame</span></div>
 
 			<p>All communication between your C engine and Lua scripts goes through a <strong>virtual stack</strong>. You push arguments onto the stack, call a function, and pop the results. It's low-level but explicit — there's no hidden magic, and every operation has a predictable cost.</p>
 
-			<div class="codeblock"><span class="cm">// Create a Lua state, load standard libraries</span>
-lua_State *L = luaL_newstate();
-luaL_openlibs(L);
+			<div class="codeblock">
+			<span class="cm">// Create a Lua state, load standard libraries</span>
+			lua_State *L = luaL_newstate();
+			luaL_openlibs(L);
 
-<span class="cm">// Register a C function that Lua scripts can call</span>
-<span class="kw">static int</span> <span class="fn">l_get_player_hp</span>(lua_State *L) {
-    lua_pushnumber(L, player.hp);  <span class="cm">// push result onto stack</span>
-    <span class="kw">return</span> <span class="num">1</span>;                     <span class="cm">// number of return values</span>
-}
-lua_register(L, <span class="str">"get_player_hp"</span>, l_get_player_hp);
+			<span class="cm">// Register a C function that Lua scripts can call</span>
+			<span class="kw">static int</span> <span class="fn">l_get_player_hp</span>(lua_State *L) {
+            lua_pushnumber(L, player.hp);  <span class="cm">// push result onto stack</span>
+            <span class="kw">return</span> <span class="num">1</span>;                     <span class="cm">// number of return values</span>
+        }
+        lua_register(L, <span class="str">"get_player_hp"</span>, l_get_player_hp);
 
-<span class="cm">// Load and run a script file</span>
-luaL_dofile(L, <span class="str">"scripts/enemy_ai.lua"</span>);
+        <span class="cm">// Load and run a script file</span>
+        luaL_dofile(L, <span class="str">"scripts/enemy_ai.lua"</span>);
 
-<span class="cm">// Call a Lua function from C</span>
-lua_getglobal(L, <span class="str">"on_enemy_damaged"</span>);  <span class="cm">// push function</span>
-lua_pushnumber(L, enemy_id);            <span class="cm">// push arg 1</span>
-lua_pushnumber(L, damage);              <span class="cm">// push arg 2</span>
-lua_pcall(L, <span class="num">2</span>, <span class="num">0</span>, <span class="num">0</span>);                <span class="cm">// call with 2 args, 0 returns</span></div>
+        <span class="cm">// Call a Lua function from C</span>
+        lua_getglobal(L, <span class="str">"on_enemy_damaged"</span>);  <span class="cm">// push function</span>
+        lua_pushnumber(L, enemy_id);            <span class="cm">// push arg 1</span>
+        lua_pushnumber(L, damage);              <span class="cm">// push arg 2</span>
+        lua_pcall(L, <span class="num">2</span>, <span class="num">0</span>, <span class="num">0</span>);                <span class="cm">// call with 2 args, 0 returns</span>
+	</div>
 
 			<p>With LuaJIT's FFI, the Lua side becomes even simpler — scripts can call your engine's C functions directly without you writing any binding code at all:</p>
 
-			<div class="codeblock"><span class="cm">-- LuaJIT FFI: declare and call C functions from Lua</span>
-<span class="kw">local</span> ffi = require(<span class="str">"ffi"</span>)
-ffi.cdef[[
-    <span class="kw">float</span> get_player_hp(<span class="kw">void</span>);
-    <span class="kw">void</span>  apply_damage(<span class="kw">int</span> entity_id, <span class="kw">float</span> amount);
-    <span class="kw">void</span>  spawn_particle(<span class="kw">float</span> x, <span class="kw">float</span> y, <span class="kw">int</span> type);
-]]
+			<div class="codeblock">
+			    <span class="cm">-- LuaJIT FFI: declare and call C functions from Lua</span>
+							<span class="kw">local</span> ffi = require(<span class="str">"ffi"</span>)
+                    ffi.cdef[[
+                <span class="kw">float</span> get_player_hp(<span class="kw">void</span>);
+                <span class="kw">void</span>  apply_damage(<span class="kw">int</span> entity_id, <span class="kw">float</span> amount);
+                <span class="kw">void</span>  spawn_particle(<span class="kw">float</span> x, <span class="kw">float</span> y, <span class="kw">int</span> type);
+                ]]
 
-<span class="cm">-- Call them as if they were Lua functions</span>
-<span class="kw">local</span> hp = ffi.C.get_player_hp()
-ffi.C.apply_damage(<span class="num">42</span>, <span class="num">10.5</span>)
-ffi.C.spawn_particle(player.x, player.y, PARTICLE_SPARK)</div>
+                <span class="cm">-- Call them as if they were Lua functions</span>
+                <span class="kw">local</span> hp = ffi.C.get_player_hp()
+                ffi.C.apply_damage(<span class="num">42</span>, <span class="num">10.5</span>)
+                ffi.C.spawn_particle(player.x, player.y, PARTICLE_SPARK)
+			</div>
 		</div>
 
 		<div class="section">
