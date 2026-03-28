@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Memory Allocators — From First Principles</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+
+          /* Domain colors — consistent throughout all diagrams */
+          --used: #f06565;        /* allocated / in-use memory */
+          --free: #4dc462;        /* free / available space */
+          --meta: #3d9be8;        /* metadata / headers / bookkeeping */
+          --pad: #e8b834;         /* alignment padding / waste */
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+
+          /* Allocator-specific accents */
+          --arena: #4dc462;
+          --stack: #3d9be8;
+          --pool: #e8b834;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      /* ── Layout ── */
+      .page { max-width: 1080px; margin: 0 auto; padding: 48px 24px 100px; }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      /* ── Tabs ── */
+      .tab-bar {
+          display: flex; gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          justify-content: center;
+      }
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px; font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none; border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+      .tab-btn:hover { color: var(--text); background: var(--surface2); }
+      .tab-btn.active { color: #fff; background: var(--accent); }
+
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; animation: fadeIn 0.2s ease; }
+
+      @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+      }
+
+      /* ── Prose ── */
+      .section { margin-bottom: 40px; }
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px; font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+      .section p { margin-bottom: 14px; }
+      .section p:last-child { margin-bottom: 0; }
+      strong { color: var(--text-b); font-weight: 600; }
+
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      /* ── Diagrams ── */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px; font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* ── Memory block diagrams ── */
+      .mem-strip {
+          display: flex;
+          align-items: stretch;
+          min-height: 44px;
+          border-radius: 4px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+      }
+      .mem-block {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          padding: 6px 4px;
+          text-align: center;
+          line-height: 1.3;
+          position: relative;
+          min-width: 0;
+      }
+      .mem-block.used {
+          background: rgba(240, 101, 101, 0.12);
+          color: var(--used);
+          border-right: 1px solid rgba(240, 101, 101, 0.2);
+      }
+      .mem-block.free {
+          background: rgba(77, 196, 98, 0.07);
+          color: var(--free);
+          border-right: 1px solid rgba(77, 196, 98, 0.15);
+      }
+      .mem-block.meta {
+          background: rgba(61, 155, 232, 0.1);
+          color: var(--meta);
+          border-right: 1px solid rgba(61, 155, 232, 0.2);
+      }
+      .mem-block.pad {
+          background: rgba(232, 184, 52, 0.08);
+          color: var(--pad);
+          border-right: 1px solid rgba(232, 184, 52, 0.15);
+      }
+      .mem-block.empty {
+          background: rgba(80, 80, 100, 0.04);
+          color: var(--text-xdim);
+          border-right: 1px solid var(--border);
+      }
+      .mem-block:last-child { border-right: none; }
+
+      .mem-label-row {
+          display: flex;
+          margin-top: 6px;
+          font-family: var(--mono);
+          font-size: 9px;
+          color: var(--text-dim);
+      }
+      .mem-label-row span {
+          text-align: center;
+      }
+
+      /* Pointer arrow */
+      .ptr-row {
+          display: flex;
+          align-items: flex-end;
+          min-height: 28px;
+          margin-bottom: 2px;
+      }
+      .ptr-marker {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-align: center;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+      }
+      .ptr-marker .ptr-arrow { font-size: 14px; line-height: 1; }
+      .ptr-marker .ptr-label { font-size: 9px; margin-bottom: 1px; }
+
+      /* ── Code block ── */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+      }
+      .codeblock .kw  { color: var(--accent2); }
+      .codeblock .cm  { color: var(--text-dim); font-style: italic; }
+      .codeblock .op  { color: #e599f7; }
+      .codeblock .num { color: var(--pad); }
+      .codeblock .str { color: var(--free); }
+      .codeblock .fn  { color: var(--meta); }
+      .codeblock .tp  { color: var(--used); }
+
+      /* ── Callout ── */
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+      .callout.green {
+          background: rgba(77, 196, 98, 0.06);
+          border-color: rgba(77, 196, 98, 0.14);
+      }
+
+      /* ── Table ── */
+      .tbl-wrap { overflow-x: auto; margin: 16px 0; }
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+      th {
+          text-align: left; padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600; font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+      }
+      tr:last-child td { border-bottom: none; }
+
+      /* ── Comparison cards ── */
+      .compare-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+          margin: 16px 0;
+      }
+      .compare-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px;
+      }
+      .compare-card h3 {
+          font-family: var(--mono);
+          font-size: 12px;
+          font-weight: 700;
+          margin-bottom: 10px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid var(--border);
+      }
+      .compare-card p {
+          font-size: 14px;
+          margin-bottom: 8px;
+      }
+      .compare-card p:last-child { margin-bottom: 0; }
+
+      /* ── Inline colored labels ── */
+      .cr { color: var(--used); }
+      .cg { color: var(--free); }
+      .cb { color: var(--meta); }
+      .cy { color: var(--pad); }
+      .cp { color: var(--accent2); }
+
+      /* ── Step label ── */
+      .step-label {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--accent);
+          margin-bottom: 8px;
+      }
+
+      /* ── Flow arrow ── */
+      .flow-arrow {
+          text-align: center;
+          color: var(--text-xdim);
+          font-size: 18px;
+          padding: 6px 0;
+          font-family: var(--mono);
+      }
+
+      /* ── Scroll hint ── */
+      .scroll-hint { min-width: 580px; }
+
+      /* ── Legend ── */
+      .legend {
+          display: flex;
+          gap: 20px;
+          flex-wrap: wrap;
+          margin: 12px 0;
+          font-family: var(--mono);
+          font-size: 10px;
+      }
+      .legend-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+      }
+      .legend-swatch {
+          width: 12px;
+          height: 12px;
+          border-radius: 2px;
+      }
+
+      @media (max-width: 640px) {
+          .tab-btn { font-size: 10px; padding: 7px 10px; }
+          .compare-grid { grid-template-columns: 1fr; }
+          .mem-block { font-size: 9px; }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<a class="back-link" href="/lab/"
+		 style="font-family:var(--mono);font-size:11px;color:var(--text-dim);text-decoration:none;display:inline-block;margin-bottom:24px;letter-spacing:0.3px;">←
+		back to lab</a>
+
+	<div class="page-header">
+		<h1>memory allocators from first principles</h1>
+		<div class="sub">arena · stack · pool · game engine allocation strategies · for developers who want the full picture</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="problem">The Problem</button>
+		<button class="tab-btn" data-tab="concepts">Core Concepts</button>
+		<button class="tab-btn" data-tab="arena">Arena Allocator</button>
+		<button class="tab-btn" data-tab="stack-pool">Stack & Pool</button>
+		<button class="tab-btn" data-tab="integration">Engine Integration</button>
+		<button class="tab-btn" data-tab="impl">Implementation</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE PROBLEM                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-problem">
+
+		<div class="section">
+			<h2>Why not just use malloc?</h2>
+
+			<p><code>malloc</code> is a <strong>general-purpose allocator</strong>. It's designed to handle any allocation pattern: any size, any order, any lifetime. To do that, it maintains free lists, coalesces freed blocks, tracks metadata per allocation, and may acquire pages from the OS. Every call carries overhead you can't see: locking a mutex (thread safety), walking a free list (finding a fit), splitting or coalescing blocks (maintaining the heap), and sometimes calling <code>mmap</code>/<code>VirtualAlloc</code> (kernel transition).</p>
+
+			<p>For a web server that allocates a buffer every few milliseconds, this is fine. For a game running at 60 fps — allocating and freeing thousands of objects every 16.6ms — it's a slow death. Not because any single <code>malloc</code> is catastrophically slow, but because the <strong>aggregate cost compounds per frame</strong>, the heap fragments over time, and your data ends up scattered across memory in cache-hostile patterns.</p>
+
+			<p>The fundamental issue: <strong>malloc knows nothing about your program's allocation patterns.</strong> It has to assume the worst case — arbitrary sizes, arbitrary lifetimes, arbitrary free order. If you <em>do</em> know your patterns (and in a game engine, you almost always do), you can build allocators that are orders of magnitude faster by exploiting that knowledge.</p>
+		</div>
+
+		<div class="section">
+			<h2>What a game frame actually looks like</h2>
+
+			<p>A single frame in a game engine produces several distinct allocation patterns. Understanding these is the key to choosing the right allocator.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Typical allocation patterns per frame</div>
+
+				<div class="tbl-wrap">
+					<table>
+						<tr>
+							<th>Pattern</th>
+							<th>Lifetime</th>
+							<th>Size</th>
+							<th>Example</th>
+						</tr>
+						<tr>
+							<td><strong style="color:var(--used);">Frame-scoped</strong></td>
+							<td>Born and dies within one frame</td>
+							<td>Variable</td>
+							<td>Scratch strings, temp collision lists, debug draw commands, visibility query results</td>
+						</tr>
+						<tr>
+							<td><strong style="color:var(--meta);">Persistent</strong></td>
+							<td>Lives for the entire level/session</td>
+							<td>Known at load time</td>
+							<td>Mesh data, textures, audio buffers, level geometry</td>
+						</tr>
+						<tr>
+							<td><strong style="color:var(--pad);">Fixed-size churn</strong></td>
+							<td>Unpredictable spawn/despawn</td>
+							<td>All same size</td>
+							<td>Entities, particles, projectiles, AI nodes</td>
+						</tr>
+						<tr>
+							<td><strong style="color:var(--free);">Phase-scoped</strong></td>
+							<td>Lives for a loading screen, a cutscene, a menu</td>
+							<td>Variable</td>
+							<td>UI layouts, dialog trees, scripted sequences</td>
+						</tr>
+					</table>
+				</div>
+
+				<div class="diagram-caption">
+					Each pattern has a different answer. The mistake is reaching for one allocator (malloc) for all of them.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The heap over time</h2>
+
+			<p>Here's what happens to a general-purpose heap after thousands of alloc/free cycles with mixed sizes and lifetimes:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Heap fragmentation — frame 0 vs frame 10,000</div>
+
+				<div class="legend">
+					<div class="legend-item"><div class="legend-swatch" style="background:rgba(240,101,101,0.25);"></div><span style="color:var(--used);">Allocated</span></div>
+					<div class="legend-item"><div class="legend-swatch" style="background:rgba(77,196,98,0.12);"></div><span style="color:var(--free);">Free</span></div>
+					<div class="legend-item"><div class="legend-swatch" style="background:rgba(61,155,232,0.15);"></div><span style="color:var(--meta);">Metadata</span></div>
+				</div>
+
+				<p style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-bottom:8px;">FRAME 0 — clean heap</p>
+				<div class="mem-strip">
+					<div class="mem-block meta" style="flex: 0 0 20px;">hdr</div>
+					<div class="mem-block used" style="flex: 3;">Entity A</div>
+					<div class="mem-block meta" style="flex: 0 0 20px;">hdr</div>
+					<div class="mem-block used" style="flex: 2;">Entity B</div>
+					<div class="mem-block meta" style="flex: 0 0 20px;">hdr</div>
+					<div class="mem-block used" style="flex: 5;">Mesh Data</div>
+					<div class="mem-block free" style="flex: 8;">free</div>
+				</div>
+
+				<div class="flow-arrow">⋮ 10,000 frames of alloc/free ⋮</div>
+
+				<p style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-bottom:8px;">FRAME 10,000 — fragmented heap</p>
+				<div class="mem-strip">
+					<div class="mem-block meta" style="flex: 0 0 14px;">h</div>
+					<div class="mem-block used" style="flex: 1;">E</div>
+					<div class="mem-block free" style="flex: 1;"></div>
+					<div class="mem-block meta" style="flex: 0 0 14px;">h</div>
+					<div class="mem-block used" style="flex: 2;">Proj</div>
+					<div class="mem-block free" style="flex: 0.6;"></div>
+					<div class="mem-block meta" style="flex: 0 0 14px;">h</div>
+					<div class="mem-block used" style="flex: 3;">Mesh</div>
+					<div class="mem-block free" style="flex: 0.4;"></div>
+					<div class="mem-block meta" style="flex: 0 0 14px;">h</div>
+					<div class="mem-block used" style="flex: 1;">AI</div>
+					<div class="mem-block free" style="flex: 1.5;"></div>
+					<div class="mem-block meta" style="flex: 0 0 14px;">h</div>
+					<div class="mem-block used" style="flex: 1.5;">Ptcl</div>
+					<div class="mem-block free" style="flex: 0.8;"></div>
+					<div class="mem-block meta" style="flex: 0 0 14px;">h</div>
+					<div class="mem-block used" style="flex: 1;">Snd</div>
+					<div class="mem-block free" style="flex: 2;"></div>
+				</div>
+
+				<div class="diagram-caption">
+					Plenty of total free memory, but no single contiguous block is large enough for a new big allocation. Meanwhile, every cache line you touch drags in interleaved free-list metadata and dead space. The <span class="cb">blue headers</span> are per-allocation bookkeeping that malloc needs — 8–16 bytes each.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The insight</h2>
+
+			<div class="callout">
+				<strong>If you know the lifetime, you know the allocator.</strong> Frame-scoped data → arena (reset every frame). Persistent data → arena (never freed until level unload). Fixed-size churn → pool. This is the core principle: you trade generality for speed by encoding your knowledge of allocation patterns directly into the allocation strategy.
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: CORE CONCEPTS                              -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-concepts">
+
+		<div class="section">
+			<h2>Lifetime-based thinking</h2>
+
+			<p>General-purpose allocators track each allocation individually — every <code>malloc</code> must be paired with a <code>free</code>, and the allocator must handle them in any order. Custom allocators work differently: <strong>you group allocations by lifetime</strong>, then free the entire group at once.</p>
+
+			<p>This is a categorical shift. You stop thinking "I need to free this object" and start thinking "everything in this arena was allocated for this frame, so I reset the arena at frame end." No per-object tracking. No free lists. No fragmentation. The lifetime <em>is</em> the deallocation strategy.</p>
+		</div>
+
+		<div class="section">
+			<h2>Alignment</h2>
+
+			<p>CPUs don't read memory byte-by-byte — they read in chunks (4 bytes, 8 bytes, 16 bytes depending on the architecture and the data type). If a 4-byte integer starts at address 0x1003 instead of 0x1004, the CPU might need two reads instead of one (or on some architectures, fault entirely). This is <strong>alignment</strong>: the requirement that an N-byte value's address is a multiple of N (or some power of two).</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Aligned vs unaligned — 4-byte integer at different addresses</div>
+				<div class="scroll-hint">
+
+					<p style="font-family:var(--mono); font-size:10px; color:var(--free); margin-bottom:6px;">✓ ALIGNED — address 0x1004 (divisible by 4)</p>
+					<div class="mem-strip" style="max-width: 520px;">
+						<div class="mem-block empty" style="flex: 4; font-size:9px;">0x1000–1003</div>
+						<div class="mem-block used" style="flex: 4;">int32 @ 0x1004</div>
+						<div class="mem-block empty" style="flex: 4; font-size:9px;">0x1008–100B</div>
+					</div>
+					<p style="font-family:var(--mono); font-size:9px; color:var(--text-dim); margin: 4px 0;">↑ one read — CPU fetches 4 bytes starting at 0x1004</p>
+
+					<div style="height: 14px;"></div>
+
+					<p style="font-family:var(--mono); font-size:10px; color:var(--used); margin-bottom:6px;">✗ UNALIGNED — address 0x1003 (not divisible by 4)</p>
+					<div class="mem-strip" style="max-width: 520px;">
+						<div class="mem-block empty" style="flex: 3; font-size:9px;">0x1000–02</div>
+						<div class="mem-block used" style="flex: 1; border-right: 2px dashed var(--text-xdim);">i…</div>
+						<div class="mem-block used" style="flex: 3;">…nt32</div>
+						<div class="mem-block empty" style="flex: 5; font-size:9px;">0x1008–100B</div>
+					</div>
+					<p style="font-family:var(--mono); font-size:9px; color:var(--text-dim); margin: 4px 0;">↑ two reads — straddles a 4-byte boundary, CPU must read both halves and combine</p>
+
+				</div>
+			</div>
+
+			<p>Every allocator in this page must return addresses that satisfy the requested alignment. The standard alignment for most types is <code>alignof(max_align_t)</code>, which is typically 8 or 16 bytes. SIMD types (SSE/AVX vectors) require 16 or 32 bytes. We'll see the alignment math in the Implementation tab.</p>
+		</div>
+
+		<div class="section">
+			<h2>Fragmentation: external vs internal</h2>
+
+			<div class="compare-grid">
+				<div class="compare-card">
+					<h3 style="color: var(--used);">External fragmentation</h3>
+					<p>Free memory exists, but it's split into chunks too small to satisfy a request. Caused by variable-size allocations freed in unpredictable order. This is the heap diagram from the previous tab.</p>
+					<p><strong>Arena allocators eliminate this entirely</strong> — they never free individual objects, so holes can't form.</p>
+				</div>
+				<div class="compare-card">
+					<h3 style="color: var(--pad);">Internal fragmentation</h3>
+					<p>An allocation uses more memory than the object needs. Caused by alignment padding, block-size rounding, or fixed-size pool slots bigger than the actual object.</p>
+					<p><strong>Pool allocators trade this intentionally</strong> — you waste a few bytes per slot to gain O(1) alloc/free with zero external fragmentation.</p>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The four allocator types</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Allocator</th>
+						<th>Alloc</th>
+						<th>Free</th>
+						<th>Best for</th>
+						<th>Tradeoff</th>
+					</tr>
+					<tr>
+						<td><strong style="color:var(--arena);">Arena (bump)</strong></td>
+						<td>O(1) — pointer bump</td>
+						<td>O(1) — reset entire arena</td>
+						<td>Frame-scoped, phase-scoped, load-time</td>
+						<td>Can't free individual allocations</td>
+					</tr>
+					<tr>
+						<td><strong style="color:var(--stack);">Stack</strong></td>
+						<td>O(1) — pointer bump</td>
+						<td>O(1) — pop to saved position</td>
+						<td>LIFO scopes: function scratch, recursive traversals</td>
+						<td>Must free in reverse order</td>
+					</tr>
+					<tr>
+						<td><strong style="color:var(--pool);">Pool</strong></td>
+						<td>O(1) — pop free list</td>
+						<td>O(1) — push free list</td>
+						<td>Fixed-size objects: entities, particles, nodes</td>
+						<td>All slots same size; wastes space for smaller objects</td>
+					</tr>
+					<tr>
+						<td><strong style="color:var(--text-dim);">General (malloc)</strong></td>
+						<td>O(n) — search free list</td>
+						<td>O(n) — coalesce + merge</td>
+						<td>Unpredictable sizes and lifetimes</td>
+						<td>Slow, fragments, per-alloc metadata overhead</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				Notice the pattern: <strong>every custom allocator restricts what you can do</strong> (no individual free, LIFO-only free, fixed-size only) in exchange for making what you <em>can</em> do extremely fast and fragmentation-free. The engineering task is matching each restriction to a subsystem where it's naturally satisfied.
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: ARENA ALLOCATOR                            -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-arena">
+
+		<div class="section">
+			<h2>The simplest allocator that's actually useful</h2>
+
+			<p>An arena allocator owns a large block of memory and maintains a single pointer: <strong>where the next allocation starts</strong>. To allocate, you bump that pointer forward by the requested size (plus alignment). To free, you reset the pointer to the beginning. That's it — no headers, no free lists, no bookkeeping per allocation.</p>
+
+			<div class="codeblock"><span class="kw">typedef struct</span> {
+    <span class="tp">uint8_t</span> *<span class="fn">buf</span>;       <span class="cm">// backing memory (start of the block)</span>
+    <span class="tp">size_t</span>   <span class="fn">cap</span>;       <span class="cm">// total capacity in bytes</span>
+    <span class="tp">size_t</span>   <span class="fn">offset</span>;    <span class="cm">// current allocation point (the "bump pointer")</span>
+} <span class="tp">Arena</span>;</div>
+
+			<p>Three fields. That's the entire allocator state. Contrast with <code>malloc</code>'s implementation, which maintains thread-local caches, size-class bins, free trees, and per-allocation headers.</p>
+		</div>
+
+		<div class="section">
+			<h2>Worked example: three allocations</h2>
+
+			<p>We create a 64-byte arena and allocate three objects: a 12-byte struct (align 4), an 8-byte double (align 8), and a 20-byte buffer (align 1). Watch the offset pointer.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 0 — Fresh arena (64 bytes)</div>
+
+				<div class="ptr-row">
+					<div class="ptr-marker" style="color:var(--arena); margin-left: 0;">
+						<div class="ptr-label">offset=0</div>
+						<div class="ptr-arrow">↓</div>
+					</div>
+				</div>
+				<div class="mem-strip">
+					<div class="mem-block free" style="flex: 64;">64 bytes free</div>
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 1 — arena_alloc(arena, 12, 4)</div>
+				<p style="font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+					Offset is 0, which is already aligned to 4. Allocate 12 bytes. New offset = 12.
+				</p>
+
+				<div class="ptr-row">
+					<div class="ptr-marker" style="color:var(--arena); margin-left: calc(12 / 64 * 100%);">
+						<div class="ptr-label">offset=12</div>
+						<div class="ptr-arrow">↓</div>
+					</div>
+				</div>
+				<div class="mem-strip">
+					<div class="mem-block used" style="flex: 12;">struct<br><span style="font-size:8px;">0x00–0x0B</span></div>
+					<div class="mem-block free" style="flex: 52;">52 bytes free</div>
+				</div>
+
+				<div class="diagram-caption">Cost: <strong>one addition, one comparison</strong>. No metadata written. No locking.</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 2 — arena_alloc(arena, 8, 8)</div>
+				<p style="font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+					Offset is 12. Alignment requires a multiple of 8. Next multiple of 8 after 12 is 16. So we insert <span class="cy">4 bytes of padding</span>, then allocate 8. New offset = 24.
+				</p>
+
+				<div class="ptr-row">
+					<div class="ptr-marker" style="color:var(--arena); margin-left: calc(24 / 64 * 100%);">
+						<div class="ptr-label">offset=24</div>
+						<div class="ptr-arrow">↓</div>
+					</div>
+				</div>
+				<div class="mem-strip">
+					<div class="mem-block used" style="flex: 12;">struct</div>
+					<div class="mem-block pad" style="flex: 4;">pad</div>
+					<div class="mem-block used" style="flex: 8;">double<br><span style="font-size:8px;">0x10–0x17</span></div>
+					<div class="mem-block free" style="flex: 40;">40 bytes free</div>
+				</div>
+
+				<div class="diagram-caption">The <span class="cy">4-byte pad</span> is internal fragmentation — the cost of alignment. On average this wastes <code>alignment / 2</code> bytes per allocation. That's a rounding error compared to malloc's per-allocation headers.</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 3 — arena_alloc(arena, 20, 1)</div>
+				<p style="font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+					Offset is 24. Alignment is 1 (byte buffer — no alignment needed). Allocate 20. New offset = 44.
+				</p>
+
+				<div class="ptr-row">
+					<div class="ptr-marker" style="color:var(--arena); margin-left: calc(44 / 64 * 100%);">
+						<div class="ptr-label">offset=44</div>
+						<div class="ptr-arrow">↓</div>
+					</div>
+				</div>
+				<div class="mem-strip">
+					<div class="mem-block used" style="flex: 12;">struct</div>
+					<div class="mem-block pad" style="flex: 4;">pad</div>
+					<div class="mem-block used" style="flex: 8;">double</div>
+					<div class="mem-block used" style="flex: 20;">buffer<br><span style="font-size:8px;">0x18–0x2B</span></div>
+					<div class="mem-block free" style="flex: 20;">20 free</div>
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Reset — arena_reset(arena)</div>
+				<p style="font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:12px;">
+					Set offset back to 0. All three allocations are "freed" in a single assignment. The memory isn't zeroed — it's just available again.
+				</p>
+
+				<div class="ptr-row">
+					<div class="ptr-marker" style="color:var(--arena); margin-left: 0;">
+						<div class="ptr-label">offset=0</div>
+						<div class="ptr-arrow">↓</div>
+					</div>
+				</div>
+				<div class="mem-strip">
+					<div class="mem-block free" style="flex: 64;">64 bytes free (old data still physically there — just unreachable)</div>
+				</div>
+
+				<div class="diagram-caption">Cost: <strong>one assignment</strong>. Zero per-object work regardless of how many allocations were made.</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The alloc function</h2>
+
+			<div class="codeblock"><span class="kw">void</span> *<span class="fn">arena_alloc</span>(<span class="tp">Arena</span> *a, <span class="tp">size_t</span> size, <span class="tp">size_t</span> align) {
+    <span class="cm">// Round offset up to required alignment</span>
+    <span class="tp">size_t</span> aligned = (a-><span class="fn">offset</span> + align - <span class="num">1</span>) & ~(align - <span class="num">1</span>);
+
+    <span class="cm">// Check if there's room</span>
+    <span class="kw">if</span> (aligned + size > a-><span class="fn">cap</span>) <span class="kw">return</span> <span class="num">NULL</span>;  <span class="cm">// out of memory</span>
+
+    <span class="kw">void</span> *ptr = a-><span class="fn">buf</span> + aligned;
+    a-><span class="fn">offset</span> = aligned + size;
+    <span class="kw">return</span> ptr;
+}</div>
+
+			<p>The alignment formula <code>(offset + align - 1) & ~(align - 1)</code> rounds up to the next multiple of <code>align</code>. We'll break this down in the Implementation tab. The key point here: the entire function is a round-up, a comparison, an addition, and a pointer return. No branching except the bounds check.</p>
+		</div>
+
+		<div class="section">
+			<h2>Frame arena pattern</h2>
+
+			<p>The most common use in game engines: allocate a large arena at startup (e.g. 8 MB), and use it for all per-frame scratch data. At the end of each frame, reset it. Every frame starts with a clean, unfragmented arena at zero cost.</p>
+
+			<div class="codeblock"><span class="cm">// Game loop</span>
+<span class="kw">while</span> (running) {
+    <span class="fn">arena_reset</span>(&frame_arena);              <span class="cm">// one assignment — frees everything</span>
+
+    <span class="tp">CollisionList</span> *hits = <span class="fn">arena_alloc</span>(&frame_arena, ...);
+    <span class="tp">DrawCmd</span>       *cmds = <span class="fn">arena_alloc</span>(&frame_arena, ...);
+    <span class="tp">char</span>          *msg  = <span class="fn">arena_alloc</span>(&frame_arena, ...);
+
+    <span class="fn">update</span>(hits, cmds, msg);
+    <span class="fn">render</span>(cmds);
+    <span class="cm">// no individual frees needed — arena_reset handles everything next frame</span>
+}</div>
+
+			<div class="callout green">
+				<strong>This is the single most impactful pattern in game engine memory management.</strong> It eliminates per-frame allocation overhead, prevents fragmentation, and makes memory leaks structurally impossible for frame-scoped data — if you forgot to free something, the arena reset catches it anyway.
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: STACK & POOL                               -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-stack-pool">
+
+		<div class="section">
+			<h2>Stack allocator: arena with scoped rollback</h2>
+
+			<p>A stack allocator is an arena that supports partial rollback. You save the current offset (a "marker"), allocate a batch of memory, use it, then restore the offset to the saved position. The constraint: <strong>you must free in reverse order of allocation</strong> — last in, first out.</p>
+
+			<div class="codeblock"><span class="kw">typedef</span> <span class="tp">size_t</span> <span class="tp">StackMark</span>;  <span class="cm">// just a saved offset</span>
+
+<span class="tp">StackMark</span> <span class="fn">stack_save</span>(<span class="tp">Arena</span> *a)                { <span class="kw">return</span> a-><span class="fn">offset</span>; }
+<span class="kw">void</span>      <span class="fn">stack_restore</span>(<span class="tp">Arena</span> *a, <span class="tp">StackMark</span> m) { a-><span class="fn">offset</span> = m; }</div>
+
+			<p>That's the entire API. A stack allocator is literally an arena plus two trivial functions. The "mark" is just a saved copy of the offset.</p>
+		</div>
+
+		<div class="section">
+			<h2>Worked example: nested scratch scopes</h2>
+
+			<p>A pathfinding function needs temporary space for an open set and a closed set. It shouldn't permanently consume arena memory — it should give it back when done.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Stack allocator — save / alloc / restore</div>
+
+				<p style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-bottom:6px;">1. save marker before pathfinding</p>
+				<div class="ptr-row">
+					<div class="ptr-marker" style="color:var(--stack); margin-left: calc(24 / 80 * 100%);">
+						<div class="ptr-label">offset=24 (mark saved here)</div>
+						<div class="ptr-arrow">↓</div>
+					</div>
+				</div>
+				<div class="mem-strip" style="max-width: 600px;">
+					<div class="mem-block used" style="flex: 24; font-size:9px;">earlier allocs</div>
+					<div class="mem-block free" style="flex: 56;">free</div>
+				</div>
+
+				<div style="height: 14px;"></div>
+				<p style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-bottom:6px;">2. allocate open_set (16B) + closed_set (20B)</p>
+				<div class="ptr-row">
+					<div class="ptr-marker" style="color:var(--stack); margin-left: calc(60 / 80 * 100%);">
+						<div class="ptr-label">offset=60</div>
+						<div class="ptr-arrow">↓</div>
+					</div>
+				</div>
+				<div class="mem-strip" style="max-width: 600px;">
+					<div class="mem-block used" style="flex: 24; font-size:9px;">earlier allocs</div>
+					<div class="mem-block used" style="flex: 16; background: rgba(61,155,232,0.12); color: var(--stack);">open_set</div>
+					<div class="mem-block used" style="flex: 20; background: rgba(61,155,232,0.12); color: var(--stack);">closed_set</div>
+					<div class="mem-block free" style="flex: 20;">free</div>
+				</div>
+
+				<div style="height: 14px;"></div>
+				<p style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-bottom:6px;">3. pathfinding done — restore marker</p>
+				<div class="ptr-row">
+					<div class="ptr-marker" style="color:var(--stack); margin-left: calc(24 / 80 * 100%);">
+						<div class="ptr-label">offset=24 (restored)</div>
+						<div class="ptr-arrow">↓</div>
+					</div>
+				</div>
+				<div class="mem-strip" style="max-width: 600px;">
+					<div class="mem-block used" style="flex: 24; font-size:9px;">earlier allocs</div>
+					<div class="mem-block free" style="flex: 56;">free (open_set + closed_set reclaimed)</div>
+				</div>
+
+				<div class="diagram-caption">The open_set and closed_set memory is reclaimed instantly. No per-object free. The earlier allocations are unaffected.</div>
+			</div>
+
+			<div class="callout">
+				<strong>The LIFO constraint is the key.</strong> You can't free the open_set while keeping the closed_set — you restore to a point, and everything after that point is gone. This matches naturally to function call scopes, recursive algorithms, and temporary work buffers where the allocation lifetime mirrors the call stack.
+			</div>
+		</div>
+
+		<div class="section" style="margin-top: 50px;">
+			<h2>Pool allocator: O(1) alloc/free for fixed-size objects</h2>
+
+			<p>Arenas and stacks can't free individual objects in arbitrary order. Pool allocators can — but only if <strong>every object is the same size</strong>. The trick: maintain a <strong>free list</strong> embedded directly in the unused slots.</p>
+
+			<p>When a slot is free, we store a pointer to the next free slot inside the slot itself (the slot's memory is unused anyway — we might as well use it for bookkeeping). This means the free list requires <strong>zero additional memory</strong>.</p>
+		</div>
+
+		<div class="section">
+			<h2>Worked example: 4-slot pool</h2>
+
+			<p>A pool with 4 slots, each 32 bytes (enough for an Entity struct). Initially all slots are free and chained together.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Pool — initial state (all free, linked)</div>
+
+				<div class="legend">
+					<div class="legend-item"><div class="legend-swatch" style="background:rgba(77,196,98,0.15);"></div><span style="color:var(--free);">Free slot</span></div>
+					<div class="legend-item"><div class="legend-swatch" style="background:rgba(240,101,101,0.15);"></div><span style="color:var(--used);">Allocated slot</span></div>
+					<div class="legend-item" style="color:var(--pad);">→ next-free pointer (embedded in slot)</div>
+				</div>
+
+				<p style="font-family:var(--mono); font-size:10px; color:var(--pad); margin-bottom:4px;">free_head → slot 0</p>
+				<div class="mem-strip" style="max-width: 600px;">
+					<div class="mem-block free" style="flex: 1;">slot 0<br><span style="color:var(--pad); font-size:8px;">→ slot 1</span></div>
+					<div class="mem-block free" style="flex: 1;">slot 1<br><span style="color:var(--pad); font-size:8px;">→ slot 2</span></div>
+					<div class="mem-block free" style="flex: 1;">slot 2<br><span style="color:var(--pad); font-size:8px;">→ slot 3</span></div>
+					<div class="mem-block free" style="flex: 1;">slot 3<br><span style="color:var(--pad); font-size:8px;">→ NULL</span></div>
+				</div>
+
+				<div style="height: 16px;"></div>
+
+				<p style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-bottom:4px;">After: pool_alloc() × 2 (allocate slots 0 and 1)</p>
+				<p style="font-family:var(--mono); font-size:10px; color:var(--pad); margin-bottom:4px;">free_head → slot 2</p>
+				<div class="mem-strip" style="max-width: 600px;">
+					<div class="mem-block used" style="flex: 1;">Entity A</div>
+					<div class="mem-block used" style="flex: 1;">Entity B</div>
+					<div class="mem-block free" style="flex: 1;">slot 2<br><span style="color:var(--pad); font-size:8px;">→ slot 3</span></div>
+					<div class="mem-block free" style="flex: 1;">slot 3<br><span style="color:var(--pad); font-size:8px;">→ NULL</span></div>
+				</div>
+
+				<div style="height: 16px;"></div>
+
+				<p style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-bottom:4px;">After: pool_free(Entity A) — slot 0 returned to free list head</p>
+				<p style="font-family:var(--mono); font-size:10px; color:var(--pad); margin-bottom:4px;">free_head → slot 0</p>
+				<div class="mem-strip" style="max-width: 600px;">
+					<div class="mem-block free" style="flex: 1;">slot 0<br><span style="color:var(--pad); font-size:8px;">→ slot 2</span></div>
+					<div class="mem-block used" style="flex: 1;">Entity B</div>
+					<div class="mem-block free" style="flex: 1;">slot 2<br><span style="color:var(--pad); font-size:8px;">→ slot 3</span></div>
+					<div class="mem-block free" style="flex: 1;">slot 3<br><span style="color:var(--pad); font-size:8px;">→ NULL</span></div>
+				</div>
+
+				<div class="diagram-caption">
+					Alloc: pop the head of the free list (<code>free_head = free_head→next</code>). Free: push the returned slot onto the head (<code>slot→next = free_head; free_head = slot</code>). Both are O(1), both are one or two pointer operations. No searching. No coalescing. No fragmentation.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The embedded free list trick</h2>
+
+			<div class="codeblock"><span class="kw">typedef struct</span> {
+    <span class="tp">uint8_t</span>  *<span class="fn">buf</span>;         <span class="cm">// backing memory</span>
+    <span class="tp">size_t</span>    <span class="fn">slot_size</span>;   <span class="cm">// bytes per slot (must be ≥ sizeof(void*))</span>
+    <span class="tp">size_t</span>    <span class="fn">count</span>;       <span class="cm">// total number of slots</span>
+    <span class="kw">void</span>     *<span class="fn">free_head</span>;  <span class="cm">// head of the embedded free list</span>
+} <span class="tp">Pool</span>;
+
+<span class="kw">void</span> *<span class="fn">pool_alloc</span>(<span class="tp">Pool</span> *p) {
+    <span class="kw">if</span> (!p-><span class="fn">free_head</span>) <span class="kw">return</span> <span class="num">NULL</span>;  <span class="cm">// pool exhausted</span>
+
+    <span class="kw">void</span> *slot = p-><span class="fn">free_head</span>;
+    p-><span class="fn">free_head</span> = *(<span class="kw">void</span> **)slot;   <span class="cm">// follow the embedded next pointer</span>
+    <span class="kw">return</span> slot;
+}
+
+<span class="kw">void</span> <span class="fn">pool_free</span>(<span class="tp">Pool</span> *p, <span class="kw">void</span> *slot) {
+    *(<span class="kw">void</span> **)slot = p-><span class="fn">free_head</span>;   <span class="cm">// write current head into the slot</span>
+    p-><span class="fn">free_head</span> = slot;              <span class="cm">// slot becomes the new head</span>
+}</div>
+
+			<p>The critical requirement: <code>slot_size</code> must be at least <code>sizeof(void*)</code> (8 bytes on 64-bit). If your objects are smaller than a pointer, pad the slot size up. This is a small price — a particle with 6 bytes of data wastes 2 bytes per slot to hold the free-list pointer when that slot is free.</p>
+		</div>
+
+		<div class="section">
+			<h2>When to use which</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Scenario</th>
+						<th>Allocator</th>
+						<th>Why</th>
+					</tr>
+					<tr>
+						<td>Per-frame scratch data</td>
+						<td style="color:var(--arena);">Arena</td>
+						<td>Everything dies at frame end → bulk reset</td>
+					</tr>
+					<tr>
+						<td>Function-local temp buffers</td>
+						<td style="color:var(--stack);">Stack</td>
+						<td>Lifetime matches function scope → save/restore</td>
+					</tr>
+					<tr>
+						<td>Entity spawn/despawn</td>
+						<td style="color:var(--pool);">Pool</td>
+						<td>Fixed-size, arbitrary lifetime, needs individual free</td>
+					</tr>
+					<tr>
+						<td>Particle systems</td>
+						<td style="color:var(--pool);">Pool</td>
+						<td>Thousands of same-size objects, rapid churn</td>
+					</tr>
+					<tr>
+						<td>Level geometry, meshes, textures</td>
+						<td style="color:var(--arena);">Arena</td>
+						<td>Loaded once, freed all at once on level change</td>
+					</tr>
+					<tr>
+						<td>String formatting, debug output</td>
+						<td style="color:var(--arena);">Arena</td>
+						<td>Variable size, frame-scoped lifetime</td>
+					</tr>
+					<tr>
+						<td>Recursive tree operations</td>
+						<td style="color:var(--stack);">Stack</td>
+						<td>Each recursion level saves/restores a scope</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: ENGINE INTEGRATION                         -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-integration">
+
+		<div class="section">
+			<h2>The allocator hierarchy</h2>
+
+			<p>A real engine doesn't use just one allocator — it uses a <strong>tree of allocators</strong>, each carved from a parent. At the root: one large allocation from the OS (via <code>mmap</code> / <code>VirtualAlloc</code>). Everything else is sub-allocated from that block.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Typical engine allocator layout</div>
+				<div style="font-family:var(--mono); font-size: 11px; line-height: 2.2;">
+					<div style="color:var(--text-b);">OS allocation (e.g. 256 MB via VirtualAlloc)</div>
+					<div style="padding-left: 20px; border-left: 1px solid var(--border); margin-left: 8px;">
+						<div style="color:var(--arena);">├── Frame Arena (8 MB) — reset every frame</div>
+						<div style="padding-left: 20px; border-left: 1px solid var(--border); margin-left: 8px; color: var(--text-dim);">
+							├── collision scratch<br>
+							├── debug draw commands<br>
+							├── temp strings / formatting<br>
+							└── visibility query results
+						</div>
+						<div style="color:var(--arena);">├── Level Arena (64 MB) — reset on level change</div>
+						<div style="padding-left: 20px; border-left: 1px solid var(--border); margin-left: 8px; color: var(--text-dim);">
+							├── mesh data<br>
+							├── textures<br>
+							├── audio buffers<br>
+							└── navigation meshes
+						</div>
+						<div style="color:var(--pool);">├── Entity Pool (16 MB) — fixed-size slots, individual alloc/free</div>
+						<div style="color:var(--pool);">├── Particle Pool (4 MB) — same pattern, smaller slots</div>
+						<div style="color:var(--stack);">├── Scratch Stack (2 MB) — LIFO scopes for algorithms</div>
+						<div style="color:var(--text-dim);">└── General Heap (remaining) — fallback for rare unpredictable allocs</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					Each subsystem gets its own allocator. The engine knows the total memory budget upfront. There's no fragmentation between subsystems because they don't share heap space.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Why pointers break with custom allocators</h2>
+
+			<p>When an arena resets, all pointers into it become dangling. When a pool slot is freed and reallocated, a stale pointer now points to a different entity. This is the "use-after-free by design" problem: <strong>custom allocators make pointer invalidation a normal event, not a bug.</strong></p>
+
+			<p>The solution: <strong>handles instead of pointers</strong>. A handle is an index (which slot) plus a generation counter (which version of that slot).</p>
+
+			<div class="codeblock"><span class="kw">typedef struct</span> {
+    <span class="tp">uint32_t</span> <span class="fn">index</span>;       <span class="cm">// which slot in the pool</span>
+    <span class="tp">uint32_t</span> <span class="fn">generation</span>;  <span class="cm">// incremented each time the slot is reused</span>
+} <span class="tp">Handle</span>;</div>
+
+			<p>Every pool slot stores its current generation. When you free and reallocate a slot, you increment the generation. When someone dereferences a handle, you compare the handle's generation to the slot's current generation — if they don't match, the handle is stale.</p>
+		</div>
+
+		<div class="section">
+			<h2>Handle dereference: the generation check</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">Generational handle — detecting stale references</div>
+				<div class="scroll-hint">
+
+				<p style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-bottom:8px;">1. Allocate slot 2, generation 1 → handle { index: 2, gen: 1 }</p>
+				<div class="mem-strip" style="max-width: 550px;">
+					<div class="mem-block used" style="flex: 1; font-size:9px;">slot 0<br>gen 3</div>
+					<div class="mem-block free" style="flex: 1; font-size:9px;">slot 1<br>gen 1</div>
+					<div class="mem-block used" style="flex: 1; font-size:9px; background: rgba(232,184,52,0.12); color: var(--pad); border-color: rgba(232,184,52,0.25);">slot 2<br>gen 1 ← active</div>
+					<div class="mem-block used" style="flex: 1; font-size:9px;">slot 3<br>gen 5</div>
+				</div>
+
+				<div style="height: 12px;"></div>
+
+				<p style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-bottom:8px;">2. Free slot 2, increment generation → gen becomes 2</p>
+				<div class="mem-strip" style="max-width: 550px;">
+					<div class="mem-block used" style="flex: 1; font-size:9px;">slot 0<br>gen 3</div>
+					<div class="mem-block free" style="flex: 1; font-size:9px;">slot 1<br>gen 1</div>
+					<div class="mem-block free" style="flex: 1; font-size:9px;">slot 2<br>gen 2</div>
+					<div class="mem-block used" style="flex: 1; font-size:9px;">slot 3<br>gen 5</div>
+				</div>
+
+				<div style="height: 12px;"></div>
+
+				<p style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-bottom:8px;">3. Re-allocate slot 2 for new entity → gen still 2</p>
+				<div class="mem-strip" style="max-width: 550px;">
+					<div class="mem-block used" style="flex: 1; font-size:9px;">slot 0<br>gen 3</div>
+					<div class="mem-block free" style="flex: 1; font-size:9px;">slot 1<br>gen 1</div>
+					<div class="mem-block used" style="flex: 1; font-size:9px; background: rgba(77,196,98,0.12); color: var(--free); border-color: rgba(77,196,98,0.2);">slot 2<br>gen 2 ← new entity</div>
+					<div class="mem-block used" style="flex: 1; font-size:9px;">slot 3<br>gen 5</div>
+				</div>
+
+				<div style="height: 12px;"></div>
+
+				<p style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-bottom:8px;">4. Old handle { index: 2, gen: 1 } tries to dereference:</p>
+
+				</div>
+
+				<div class="codeblock" style="margin:8px 0;"><span class="kw">if</span> (handle.<span class="fn">generation</span> != slots[handle.<span class="fn">index</span>].<span class="fn">generation</span>)  <span class="cm">// 1 != 2</span>
+    <span class="kw">return</span> <span class="num">NULL</span>;  <span class="cm">// stale handle — slot has been recycled</span></div>
+
+				<div class="diagram-caption">
+					The generation counter gives you O(1) stale-pointer detection without garbage collection or reference counting. This is the standard pattern in Unity DOTS, Flecs, EnTT, and nearly every handle-based game engine.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Double-buffer arenas</h2>
+
+			<p>Some data needs to survive <em>two</em> frames — the physics system reads last frame's collision pairs while this frame computes new ones. Instead of one frame arena, use two and alternate:</p>
+
+			<div class="codeblock"><span class="tp">Arena</span> frame_arenas[<span class="num">2</span>];
+<span class="tp">int</span> current = <span class="num">0</span>;
+
+<span class="kw">while</span> (running) {
+    current ^= <span class="num">1</span>;                            <span class="cm">// toggle 0 ↔ 1</span>
+    <span class="fn">arena_reset</span>(&frame_arenas[current]);      <span class="cm">// reset THIS frame's arena</span>
+    <span class="cm">// frame_arenas[current ^ 1] still holds last frame's data</span>
+
+    <span class="cm">// allocate this frame's data from frame_arenas[current]</span>
+    <span class="cm">// read last frame's data from frame_arenas[current ^ 1]</span>
+}</div>
+
+			<p>Each arena is reset every other frame. At any given time, one holds current-frame data and the other holds last-frame data. Zero additional complexity — just two arenas and a toggle.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: IMPLEMENTATION                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-impl">
+
+		<div class="section">
+			<h2>The alignment formula</h2>
+
+			<p>This is the most common bit trick in allocator code. Given an address (or offset) and a power-of-two alignment, round up to the next aligned address:</p>
+
+			<div class="codeblock"><span class="tp">size_t</span> aligned = (offset + align - <span class="num">1</span>) & ~(align - <span class="num">1</span>);</div>
+
+			<p>Let's break it down with <code>offset = 12</code>, <code>align = 8</code>:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Alignment round-up: offset=12, align=8</div>
+				<div style="font-family:var(--mono); font-size:12px; line-height: 2.2;">
+					<div><span class="cy">align - 1</span>       = 8 - 1 = 7       = <span style="color:var(--text-dim);">00000111</span></div>
+					<div><span class="cp">~(align - 1)</span>     = ~7              = <span style="color:var(--text-dim);">11111000</span>  <span class="cm">← the alignment mask</span></div>
+					<div style="height:4px;"></div>
+					<div><span class="cr">offset</span>            = 12              = <span style="color:var(--text-dim);">00001100</span></div>
+					<div><span class="cr">offset</span> + <span class="cy">7</span>        = 19              = <span style="color:var(--text-dim);">00010011</span>  <span class="cm">← push past next boundary</span></div>
+					<div><span style="color:var(--text-dim);">00010011</span> & <span class="cp">11111000</span>                  = <span style="color:var(--text-dim);">00010000</span> = 16  <span class="cm">← snap down</span></div>
+				</div>
+
+				<div class="diagram-caption">
+					Adding <code>align - 1</code> ensures that if the offset is already aligned, it stays put (12 + 7 = 19, which rounds down to 16 — wait, 12 isn't aligned to 8 so this is correct). If offset were 16: 16 + 7 = 23, AND with mask = 16. Already aligned → no change. ✓<br><br>
+					The mask <code>~(align - 1)</code> clears the low bits, effectively rounding down to the nearest multiple of <code>align</code>. The add before the mask makes it round <em>up</em>.
+				</div>
+			</div>
+
+			<div class="callout warn">
+				<strong>This only works for power-of-two alignments.</strong> Alignment values like 3, 5, or 7 will produce wrong results. In practice, all natural CPU alignments (1, 2, 4, 8, 16, 32) are powers of two, so this isn't a real constraint — but if you're writing a debug build, assert <code>(align & (align - 1)) == 0</code>.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Backing memory: virtual vs physical</h2>
+
+			<p>Where does the arena's backing buffer come from? Two approaches:</p>
+
+			<div class="compare-grid">
+				<div class="compare-card">
+					<h3 style="color: var(--used);">Physical allocation (malloc a big block)</h3>
+					<p>Simple: <code>arena.buf = malloc(8 * 1024 * 1024)</code>. The OS commits physical pages immediately (or on first touch). You pay for the full 8 MB even if you only use 200 KB this frame.</p>
+					<p>Good enough for small arenas. Not ideal for large ones where actual usage varies wildly between frames.</p>
+				</div>
+				<div class="compare-card">
+					<h3 style="color: var(--free);">Virtual memory reservation (mmap / VirtualAlloc)</h3>
+					<p><strong>Reserve</strong> a huge range (e.g. 1 GB) but <strong>commit</strong> pages only as the bump pointer reaches them. The OS maps virtual addresses but doesn't allocate physical RAM until you touch each page.</p>
+					<p>You get a contiguous address range (no realloc ever needed) and only pay for pages you actually use. This is the production approach in serious engines.</p>
+				</div>
+			</div>
+
+			<div class="codeblock"><span class="cm">// Linux: reserve 1 GB, no physical pages yet</span>
+<span class="kw">void</span> *base = <span class="fn">mmap</span>(<span class="num">NULL</span>, <span class="num">1ULL</span> << <span class="num">30</span>,
+    PROT_READ | PROT_WRITE,
+    MAP_PRIVATE | MAP_ANONYMOUS | <span class="str">MAP_NORESERVE</span>,  <span class="cm">// MAP_NORESERVE = don't commit</span>
+    -<span class="num">1</span>, <span class="num">0</span>);
+
+<span class="cm">// Windows equivalent:</span>
+<span class="kw">void</span> *base = <span class="fn">VirtualAlloc</span>(<span class="num">NULL</span>, <span class="num">1ULL</span> << <span class="num">30</span>,
+    <span class="str">MEM_RESERVE</span>,  <span class="cm">// reserve only, no physical pages</span>
+    PAGE_READWRITE);
+
+<span class="cm">// Later, commit pages as needed (e.g. when bump pointer crosses a page boundary):</span>
+<span class="fn">VirtualAlloc</span>(page_addr, page_size, <span class="str">MEM_COMMIT</span>, PAGE_READWRITE);</div>
+		</div>
+
+		<div class="section">
+			<h2>Pool initialization</h2>
+
+			<p>When you create a pool, you need to chain all slots into the initial free list. This is a one-time O(n) setup cost:</p>
+
+			<div class="codeblock"><span class="kw">void</span> <span class="fn">pool_init</span>(<span class="tp">Pool</span> *p, <span class="kw">void</span> *buf, <span class="tp">size_t</span> slot_size, <span class="tp">size_t</span> count) {
+    p-><span class="fn">buf</span>       = buf;
+    p-><span class="fn">slot_size</span> = slot_size;
+    p-><span class="fn">count</span>     = count;
+
+    <span class="cm">// Chain all slots into the free list</span>
+    <span class="kw">for</span> (<span class="tp">size_t</span> i = <span class="num">0</span>; i < count - <span class="num">1</span>; i++) {
+        <span class="kw">void</span> *slot = (<span class="tp">uint8_t</span> *)buf + i * slot_size;
+        <span class="kw">void</span> *next = (<span class="tp">uint8_t</span> *)buf + (i + <span class="num">1</span>) * slot_size;
+        *(<span class="kw">void</span> **)slot = next;  <span class="cm">// embed next pointer in slot</span>
+    }
+    <span class="cm">// Last slot points to NULL</span>
+    *(<span class="kw">void</span> **)((<span class="tp">uint8_t</span> *)buf + (count - <span class="num">1</span>) * slot_size) = <span class="num">NULL</span>;
+
+    p-><span class="fn">free_head</span> = buf;  <span class="cm">// first slot is the head</span>
+}</div>
+
+			<p>After this, the pool's backing memory contains a linked list threaded through the slots themselves. No separate allocation for the free list.</p>
+		</div>
+
+		<div class="section">
+			<h2>Debug features worth building in</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Feature</th>
+						<th>What it does</th>
+						<th>Cost</th>
+					</tr>
+					<tr>
+						<td><strong>High-water mark</strong></td>
+						<td>Track the maximum offset the arena ever reached. Tells you if your arena is oversized or nearly overflowing.</td>
+						<td>One <code>max()</code> per alloc</td>
+					</tr>
+					<tr>
+						<td><strong>Allocation count</strong></td>
+						<td>Count how many allocs happened per frame. Spike detection for unexpected allocation storms.</td>
+						<td>One increment per alloc</td>
+					</tr>
+					<tr>
+						<td><strong>Fill on reset</strong></td>
+						<td>Fill freed memory with <code>0xCD</code> on reset. Makes use-after-free immediately visible in the debugger (values look obviously wrong).</td>
+						<td>One memset per reset — debug builds only</td>
+					</tr>
+					<tr>
+						<td><strong>Guard bytes</strong></td>
+						<td>Write a magic value (e.g. <code>0xDEADBEEF</code>) after each allocation. On reset, check that the guard is intact — if not, something overwrote its bounds.</td>
+						<td>4–8 bytes per alloc + check on reset</td>
+					</tr>
+					<tr>
+						<td><strong>Double-free detection</strong></td>
+						<td>For pools: check that a slot's generation matches expectations before freeing. Catches double-free bugs.</td>
+						<td>One comparison per free</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>Ship with the debug features behind a compile flag.</strong> <code>#ifdef DEBUG_ALLOCATORS</code> around the fill/guard/count logic. The release build has zero overhead; the debug build catches memory corruption in real time. This is standard practice — every serious engine has allocator instrumentation that compiles out in release.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Cheat sheet</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Allocator</th>
+						<th>State</th>
+						<th>Alloc</th>
+						<th>Free</th>
+						<th>Fragmentation</th>
+					</tr>
+					<tr>
+						<td style="color:var(--arena);"><strong>Arena</strong></td>
+						<td><code>buf, cap, offset</code></td>
+						<td>bump offset (+ align)</td>
+						<td><code>offset = 0</code></td>
+						<td>None (external). Alignment padding (internal).</td>
+					</tr>
+					<tr>
+						<td style="color:var(--stack);"><strong>Stack</strong></td>
+						<td>Arena + saved marks</td>
+						<td>bump offset (+ align)</td>
+						<td><code>offset = mark</code></td>
+						<td>None. Same as arena.</td>
+					</tr>
+					<tr>
+						<td style="color:var(--pool);"><strong>Pool</strong></td>
+						<td><code>buf, slot_size, free_head</code></td>
+						<td>pop free list head</td>
+						<td>push onto free list head</td>
+						<td>None (external). Slot padding (internal).</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="tbl-wrap" style="margin-top: 20px;">
+				<table>
+					<tr>
+						<th>Formula</th>
+						<th>Expression</th>
+						<th>Use</th>
+					</tr>
+					<tr>
+						<td>Align up</td>
+						<td><code>(n + a-1) & ~(a-1)</code></td>
+						<td>Round <code>n</code> up to multiple of power-of-two <code>a</code></td>
+					</tr>
+					<tr>
+						<td>Is power of 2</td>
+						<td><code>(a & (a-1)) == 0</code></td>
+						<td>Validate alignment argument</td>
+					</tr>
+					<tr>
+						<td>Pool slot address</td>
+						<td><code>buf + index * slot_size</code></td>
+						<td>Handle → pointer</td>
+					</tr>
+					<tr>
+						<td>Pool index from pointer</td>
+						<td><code>(ptr - buf) / slot_size</code></td>
+						<td>Pointer → handle index</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+	</div>
+
+</div>
+
+<script>
+	// Tab switching
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
