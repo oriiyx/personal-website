@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>The Game Loop — From First Principles</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+          --phys: #f06565;
+          --render: #4dc462;
+          --input: #3d9be8;
+          --time: #e8b834;
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+          --c0: #f06565;
+          --c1: #e8b834;
+          --c2: #4dc462;
+          --c3: #3d9be8;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      .page { max-width: 1080px; margin: 0 auto; padding: 48px 24px 100px; }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      /* ── Tabs ── */
+      .tab-bar {
+          display: flex; gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          justify-content: center;
+      }
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px; font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none; border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+      .tab-btn:hover { color: var(--text); background: var(--surface2); }
+      .tab-btn.active { color: #fff; background: var(--accent); }
+
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; animation: fadeIn 0.2s ease; }
+      @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+      }
+
+      /* ── Prose ── */
+      .section { margin-bottom: 40px; }
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px; font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+      .section p { margin-bottom: 14px; }
+      .section p:last-child { margin-bottom: 0; }
+      strong { color: var(--text-b); font-weight: 600; }
+      code {
+          font-family: var(--mono); font-size: 0.88em;
+          background: var(--surface2); padding: 2px 7px;
+          border-radius: 4px; color: var(--accent2);
+      }
+
+      /* ── Diagrams ── */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px; font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* ── Timeline bars ── */
+      .timeline { display: flex; flex-direction: column; gap: 8px; min-width: 560px; }
+      .tl-row { display: flex; align-items: center; gap: 0; }
+      .tl-label {
+          width: 100px; flex-shrink: 0;
+          font-family: var(--mono); font-size: 10px;
+          color: var(--text-dim); text-align: right;
+          padding-right: 12px;
+      }
+      .tl-track { display: flex; gap: 2px; flex: 1; align-items: center; }
+      .tl-block {
+          height: 32px; border-radius: 4px;
+          display: flex; align-items: center; justify-content: center;
+          font-family: var(--mono); font-size: 10px; font-weight: 600;
+          flex-shrink: 0;
+      }
+      .tl-block.phys  { background: rgba(240,101,101,0.12); color: var(--phys); }
+      .tl-block.ren   { background: rgba(77,196,98,0.12);   color: var(--render); }
+      .tl-block.inp   { background: rgba(61,155,232,0.12);  color: var(--input); }
+      .tl-block.frame { background: rgba(232,184,52,0.08);  color: var(--time); border: 1px solid rgba(232,184,52,0.15); }
+      .tl-block.idle  { background: rgba(80,80,100,0.05);   color: var(--text-xdim); border: 1px dashed var(--border); }
+
+      .tl-tick {
+          font-family: var(--mono); font-size: 9px;
+          color: var(--text-xdim);
+          width: 2px; height: 32px;
+          display: flex; align-items: flex-end;
+          justify-content: center;
+          border-left: 1px solid var(--border);
+          padding-left: 4px;
+          flex-shrink: 0;
+      }
+
+      /* ── Step blocks (accumulator walkthrough) ── */
+      .step-grid {
+          display: grid;
+          grid-template-columns: 80px 1fr;
+          gap: 0;
+          font-family: var(--mono);
+          font-size: 12px;
+      }
+      .step-num {
+          padding: 12px 10px;
+          text-align: right;
+          color: var(--text-xdim);
+          border-right: 2px solid var(--border);
+          font-weight: 600;
+      }
+      .step-num.highlight { border-right-color: var(--accent); color: var(--accent2); }
+      .step-content {
+          padding: 12px 16px;
+          border-bottom: 1px solid var(--border);
+          line-height: 1.8;
+      }
+      .step-content:last-child { border-bottom: none; }
+
+      /* ── Accumulator bar ── */
+      .acc-bar-wrap {
+          display: flex; align-items: center; gap: 10px;
+          margin: 6px 0;
+      }
+      .acc-bar-label {
+          font-family: var(--mono); font-size: 10px;
+          color: var(--text-dim); width: 80px; text-align: right; flex-shrink: 0;
+      }
+      .acc-bar-track {
+          flex: 1; height: 20px;
+          background: var(--surface2);
+          border-radius: 4px;
+          position: relative;
+          overflow: hidden;
+          max-width: 300px;
+      }
+      .acc-bar-fill {
+          height: 100%; border-radius: 4px;
+          transition: width 0.3s;
+      }
+      .acc-bar-fill.time { background: rgba(232,184,52,0.3); border: 1px solid rgba(232,184,52,0.4); }
+      .acc-bar-fill.phys { background: rgba(240,101,101,0.3); border: 1px solid rgba(240,101,101,0.4); }
+      .acc-bar-mark {
+          position: absolute; top: 0; bottom: 0;
+          width: 2px; background: var(--phys);
+          opacity: 0.5;
+      }
+      .acc-bar-val {
+          font-family: var(--mono); font-size: 10px;
+          color: var(--text-dim); flex-shrink: 0;
+      }
+
+      /* ── Code block ── */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+      }
+      .codeblock .kw { color: var(--accent2); }
+      .codeblock .cm { color: var(--text-dim); font-style: italic; }
+      .codeblock .fn { color: var(--render); }
+      .codeblock .num { color: var(--c1); }
+      .codeblock .str { color: var(--render); }
+      .codeblock .op { color: #e599f7; }
+      .codeblock .typ { color: var(--input); }
+      .codeblock .hl { background: rgba(124,92,224,0.08); display: inline; }
+
+      /* ── Callout ── */
+      .callout {
+          background: rgba(124,92,224,0.06);
+          border: 1px solid rgba(124,92,224,0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+      .callout.warn {
+          background: rgba(232,136,58,0.06);
+          border-color: rgba(232,136,58,0.14);
+      }
+
+      /* ── Table ── */
+      .tbl-wrap { overflow-x: auto; margin: 16px 0; }
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+      th {
+          text-align: left; padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim); font-weight: 600;
+          font-size: 10px; text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+      }
+      tr:last-child td { border-bottom: none; }
+
+      /* ── Pipeline ── */
+      .pipeline { display: flex; align-items: center; gap: 0; flex-wrap: wrap; justify-content: center; }
+      .pipe-stage {
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 10px 16px;
+          text-align: center;
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 600;
+      }
+      .pipe-arrow {
+          font-family: var(--mono); font-size: 16px;
+          color: var(--text-xdim); padding: 0 6px;
+      }
+      .pipe-stage.inp  { color: var(--input);  border-color: rgba(61,155,232,0.25); }
+      .pipe-stage.phys { color: var(--phys);   border-color: rgba(240,101,101,0.25); }
+      .pipe-stage.ren  { color: var(--render); border-color: rgba(77,196,98,0.25); }
+      .pipe-stage.time { color: var(--time);   border-color: rgba(232,184,52,0.25); }
+      .pipe-stage.acc  { color: var(--accent2); border-color: rgba(124,92,224,0.25); }
+
+      /* Colored inline text */
+      .cr { color: var(--phys); }
+      .cg { color: var(--render); }
+      .cb { color: var(--input); }
+      .cy { color: var(--time); }
+      .cp { color: var(--accent2); }
+
+      /* ── Comparison columns ── */
+      .compare-cols {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+          margin: 16px 0;
+      }
+      .compare-col {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 16px 18px;
+      }
+      .compare-col h3 {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 700;
+          margin-bottom: 10px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid var(--border);
+      }
+      .compare-col p {
+          font-size: 14px;
+          margin-bottom: 8px;
+      }
+      .compare-col p:last-child { margin-bottom: 0; }
+
+      /* ── Number cards ── */
+      .num-cards { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; justify-content: center; }
+      .ncard {
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 10px 18px;
+          text-align: center;
+      }
+      .ncard .nc-val {
+          font-family: var(--mono); font-size: 22px; font-weight: 700;
+      }
+      .ncard .nc-lbl {
+          font-family: var(--mono); font-size: 9px;
+          color: var(--text-dim); margin-top: 2px;
+      }
+
+      .scroll-hint { min-width: 560px; }
+
+      @media (max-width: 640px) {
+          .tab-btn { font-size: 10px; padding: 7px 10px; }
+          .compare-cols { grid-template-columns: 1fr; }
+          .tl-label { width: 70px; font-size: 9px; }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<a class="back-link" href="/lab/"
+		 style="font-family:var(--mono);font-size:11px;color:var(--text-dim);text-decoration:none;display:inline-block;margin-bottom:24px;letter-spacing:0.3px;">←
+		back to lab</a>
+
+	<div class="page-header">
+		<h1>the game loop &amp; frame timing</h1>
+		<div class="sub">fixed vs variable timestep · the accumulator pattern · update/render separation · the spine of every engine</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="problem">The Problem</button>
+		<button class="tab-btn" data-tab="models">Timestep Models</button>
+		<button class="tab-btn" data-tab="accumulator">The Accumulator</button>
+		<button class="tab-btn" data-tab="pacing">Frame Pacing</button>
+		<button class="tab-btn" data-tab="integration">Integration</button>
+		<button class="tab-btn" data-tab="impl">Implementation</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 1: THE PROBLEM                              -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-problem">
+
+		<div class="section">
+			<h2>What is a game loop?</h2>
+
+			<p>Every real-time application — games, simulations, audio engines — has the same core structure: an infinite loop that repeatedly reads input, advances the simulation, and presents a frame. This loop runs 30, 60, 144, or more times per second. It's the heartbeat of the engine, and every subsystem's execution model is a consequence of how you design it.</p>
+
+			<p>The simplest possible loop looks like this:</p>
+
+			<div class="codeblock"><span class="kw">while</span> (running) {
+    <span class="fn">poll_input</span>();
+    <span class="fn">update</span>();
+    <span class="fn">render</span>();
+}</div>
+
+			<p>This works — barely. It runs as fast as the CPU and GPU allow. On a fast machine, the game runs faster. On a slow machine, it runs slower. Physics, animations, AI, movement speeds — everything is tied to how quickly the hardware can churn through the loop. This is how games worked in the DOS era, and it's why old DOS games run at absurd speeds on modern hardware.</p>
+		</div>
+
+		<div class="section">
+			<h2>The fundamental tension</h2>
+
+			<p>There are three competing demands, and no loop design satisfies all of them perfectly:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">The three demands</div>
+				<div class="num-cards">
+					<div class="ncard">
+						<div class="nc-val cr">Determinism</div>
+						<div class="nc-lbl">simulation wants identical<br>results every run</div>
+					</div>
+					<div class="ncard">
+						<div class="nc-val cg">Smoothness</div>
+						<div class="nc-lbl">rendering wants frames<br>as fast as possible</div>
+					</div>
+					<div class="ncard">
+						<div class="nc-val cb">Responsiveness</div>
+						<div class="nc-lbl">input wants minimum<br>latency to screen</div>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					<strong style="color:var(--phys);">Determinism</strong> means a physics simulation produces the same trajectory whether the machine runs at 30fps or 300fps. Without it, gameplay feels different on different hardware, replays don't work, and networked physics diverges.<br><br>
+					<strong style="color:var(--render);">Smoothness</strong> means rendering as many frames as possible (or exactly at the display's refresh rate) to eliminate stutters and judder.<br><br>
+					<strong style="color:var(--input);">Responsiveness</strong> means the delay between pressing a button and seeing the result on screen is as low as possible.
+				</div>
+			</div>
+
+			<p>The naive loop above gives you responsiveness (input is polled every frame) and smoothness (renders as fast as it can), but sacrifices determinism entirely. Every timestep model is a different tradeoff between these three.</p>
+		</div>
+
+		<div class="section">
+			<h2>Why frame time varies</h2>
+
+			<p>Even on the same machine, consecutive frames don't take the same amount of time. One frame might process 200 entities; the next, a particle explosion spawns 4000. The GPU might stall waiting for a texture upload. The OS might context-switch to another process. VSync might hold the frame for display alignment.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Variable frame durations (real scenario)</div>
+				<div class="scroll-hint">
+					<div class="tl-row">
+						<div class="tl-label">frame time</div>
+						<div class="tl-track">
+							<div class="tl-block frame" style="width:100px;">16.7ms</div>
+							<div class="tl-block frame" style="width:100px;">16.7ms</div>
+							<div class="tl-block frame" style="width:140px;">23.1ms</div>
+							<div class="tl-block frame" style="width:60px;">9.8ms</div>
+							<div class="tl-block frame" style="width:100px;">16.7ms</div>
+							<div class="tl-block frame" style="width:180px;">31.2ms</div>
+							<div class="tl-block frame" style="width:100px;">16.7ms</div>
+						</div>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					Frames 1–2 hit the 60fps target. Frame 3 had extra work (e.g. physics explosion). Frame 4 was light. Frame 6 had a GC pause or GPU stall. This is normal — <strong>frame times are never perfectly uniform</strong>.
+				</div>
+			</div>
+
+			<p>The entire discipline of game loop design is about deciding: <strong>given that frame times vary, how do you advance the simulation?</strong></p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 2: TIMESTEP MODELS                          -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-models">
+
+		<div class="section">
+			<h2>Model 1: Variable timestep (the naive approach)</h2>
+
+			<p>Measure how long the last frame took (<code>dt</code>), and multiply all movement/physics by it. If the frame took twice as long, move everything twice as far. In theory this makes the simulation frame-rate independent.</p>
+
+			<div class="codeblock"><span class="kw">while</span> (running) {
+    <span class="typ">double</span> dt = <span class="fn">time_since_last_frame</span>();
+    <span class="fn">poll_input</span>();
+    <span class="fn">update</span>(dt);        <span class="cm">// velocity * dt, gravity * dt, etc.</span>
+    <span class="fn">render</span>();
+}</div>
+
+			<p>This is what most tutorials teach first. It's simple. It's also broken for anything beyond trivial cases.</p>
+
+			<div class="callout warn">
+				<strong>Why variable timestep breaks physics.</strong> Consider a ball launched upward with <code>velocity.y = 100</code> and <code>gravity = -200</code>. With Euler integration:
+				<code>velocity.y += gravity * dt; position.y += velocity.y * dt</code>.
+				At 60fps (dt=0.0167), the ball reaches a peak height of ~25.0 units.
+				At 30fps (dt=0.0333), the peak is ~24.2 units.
+				At 15fps (dt=0.0667), it's ~22.2 units.
+				The trajectory changes because Euler integration is a first-order approximation — larger time steps accumulate more error. A player on a 30fps laptop experiences different jump arcs than one on a 144Hz monitor. Spring systems overshoot. Collisions tunnel through thin walls because objects teleport past them in a single large step.
+			</div>
+
+			<p>You <em>can</em> mitigate this with higher-order integrators (RK4, Verlet), but you can't eliminate it. And you still can't do deterministic replays, since frame times will differ on every run.</p>
+		</div>
+
+		<div class="section">
+			<h2>Model 2: Fixed timestep (the rigid approach)</h2>
+
+			<p>Always advance the simulation by the same <code>dt</code> — say, exactly 1/60th of a second. The simulation is perfectly deterministic: same inputs, same results, every time. Replays work. Networked physics syncs.</p>
+
+			<div class="codeblock"><span class="kw">while</span> (running) {
+    <span class="fn">poll_input</span>();
+    <span class="fn">update</span>(<span class="num">1.0/60.0</span>);   <span class="cm">// always exactly 16.67ms</span>
+    <span class="fn">render</span>();
+}</div>
+
+			<p>The problem: what if <code>update + render</code> takes less than 16.67ms? The game runs too fast — you're cranking through simulation time faster than real time. What if it takes more? The game slows down — you fall behind real time and everything moves in slow motion.</p>
+
+			<p>A pure fixed timestep only works if you can guarantee your frame budget is exactly your timestep. In practice, you can't.</p>
+		</div>
+
+		<div class="section">
+			<h2>Model 3: Semi-fixed timestep (the accumulator pattern)</h2>
+
+			<p>The industry-standard solution. Measure real elapsed time, but <strong>consume it in fixed-size bites</strong>. You run as many fixed-step physics updates as needed to "catch up" to real time, then render once.</p>
+
+			<div class="codeblock"><span class="typ">double</span> accumulator = <span class="num">0.0</span>;
+<span class="kw">const</span> <span class="typ">double</span> FIXED_DT = <span class="num">1.0</span> / <span class="num">60.0</span>;   <span class="cm">// 16.67ms</span>
+
+<span class="kw">while</span> (running) {
+    <span class="typ">double</span> frame_time = <span class="fn">time_since_last_frame</span>();
+    accumulator += frame_time;
+
+    <span class="fn">poll_input</span>();
+
+    <span class="kw">while</span> (accumulator >= FIXED_DT) {    <span class="cm">// consume in fixed bites</span>
+        <span class="fn">update</span>(FIXED_DT);
+        accumulator -= FIXED_DT;
+    }
+
+    <span class="fn">render</span>();
+}</div>
+
+			<p>This gives you fixed-timestep determinism for physics, while running the render loop at whatever rate the hardware allows. The next tab walks through exactly how the accumulator behaves frame by frame.</p>
+		</div>
+
+		<div class="section">
+			<h2>Comparison</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th></th>
+						<th>Variable dt</th>
+						<th>Fixed dt</th>
+						<th>Accumulator (semi-fixed)</th>
+					</tr>
+					<tr>
+						<td style="color:var(--phys);">Determinism</td>
+						<td>No — results depend on frame rate</td>
+						<td>Yes</td>
+						<td>Yes — physics always sees FIXED_DT</td>
+					</tr>
+					<tr>
+						<td style="color:var(--render);">Smoothness</td>
+						<td>Yes — renders every frame</td>
+						<td>Only if frame budget = timestep</td>
+						<td>Yes — renders every frame</td>
+					</tr>
+					<tr>
+						<td style="color:var(--input);">Responsiveness</td>
+						<td>Best — 1 update per frame</td>
+						<td>Variable — may be slow</td>
+						<td>Good — input polled each frame</td>
+					</tr>
+					<tr>
+						<td>Complexity</td>
+						<td>Trivial</td>
+						<td>Trivial but fragile</td>
+						<td>Moderate</td>
+					</tr>
+					<tr>
+						<td>Replays / netcode</td>
+						<td>Impossible without tricks</td>
+						<td>Straightforward</td>
+						<td>Straightforward</td>
+					</tr>
+					<tr>
+						<td>Used by</td>
+						<td>Simple 2D games, UI apps</td>
+						<td>Lockstep multiplayer (RTS)</td>
+						<td>Most modern game engines</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 3: THE ACCUMULATOR                          -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-accumulator">
+
+		<div class="section">
+			<h2>How the accumulator works: frame-by-frame</h2>
+
+			<p>Let's set <code>FIXED_DT = 16.67ms</code> (60Hz physics) and walk through 5 real frames with varying durations. The accumulator starts at 0. Each frame, we add the real elapsed time, then drain it in 16.67ms chunks.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Worked example — 5 frames</div>
+
+				<div style="font-family:var(--mono); font-size: 12px; line-height: 2.2;">
+
+					<!-- Frame 1 -->
+					<div style="margin-bottom: 20px;">
+						<div style="color:var(--time); font-weight:700; margin-bottom:4px;">Frame 1 — elapsed: 16.7ms</div>
+						<div>accumulator: <span style="color:var(--text-xdim);">0.0</span> + <span class="cy">16.7</span> = <span style="color:var(--text-b);">16.7ms</span></div>
+						<div><span class="cr">update(16.67)</span> → accumulator: 16.7 − 16.67 = <span style="color:var(--text-b);">0.03ms</span></div>
+						<div>Physics ticks: <span style="color:var(--phys); font-weight:700;">1</span> · Remainder: <span style="color:var(--accent2);">0.03ms</span></div>
+						<div><span class="cg">render()</span></div>
+					</div>
+
+					<!-- Frame 2 -->
+					<div style="margin-bottom: 20px;">
+						<div style="color:var(--time); font-weight:700; margin-bottom:4px;">Frame 2 — elapsed: 18.2ms</div>
+						<div>accumulator: <span style="color:var(--text-xdim);">0.03</span> + <span class="cy">18.2</span> = <span style="color:var(--text-b);">18.23ms</span></div>
+						<div><span class="cr">update(16.67)</span> → accumulator: 18.23 − 16.67 = <span style="color:var(--text-b);">1.56ms</span></div>
+						<div>Physics ticks: <span style="color:var(--phys); font-weight:700;">1</span> · Remainder: <span style="color:var(--accent2);">1.56ms</span></div>
+						<div><span class="cg">render()</span></div>
+					</div>
+
+					<!-- Frame 3 -->
+					<div style="margin-bottom: 20px;">
+						<div style="color:var(--time); font-weight:700; margin-bottom:4px;">Frame 3 — elapsed: 35.0ms (stutter!)</div>
+						<div>accumulator: <span style="color:var(--text-xdim);">1.56</span> + <span class="cy">35.0</span> = <span style="color:var(--text-b);">36.56ms</span></div>
+						<div><span class="cr">update(16.67)</span> → 36.56 − 16.67 = 19.89ms</div>
+						<div><span class="cr">update(16.67)</span> → 19.89 − 16.67 = <span style="color:var(--text-b);">3.22ms</span></div>
+						<div>Physics ticks: <span style="color:var(--phys); font-weight:700;">2</span> · Remainder: <span style="color:var(--accent2);">3.22ms</span></div>
+						<div><span class="cg">render()</span></div>
+					</div>
+
+					<!-- Frame 4 -->
+					<div style="margin-bottom: 20px;">
+						<div style="color:var(--time); font-weight:700; margin-bottom:4px;">Frame 4 — elapsed: 10.5ms (fast frame)</div>
+						<div>accumulator: <span style="color:var(--text-xdim);">3.22</span> + <span class="cy">10.5</span> = <span style="color:var(--text-b);">13.72ms</span></div>
+						<div>13.72 < 16.67 → <span style="color:var(--warn);">no physics update this frame</span></div>
+						<div>Physics ticks: <span style="color:var(--phys); font-weight:700;">0</span> · Remainder: <span style="color:var(--accent2);">13.72ms</span></div>
+						<div><span class="cg">render()</span></div>
+					</div>
+
+					<!-- Frame 5 -->
+					<div>
+						<div style="color:var(--time); font-weight:700; margin-bottom:4px;">Frame 5 — elapsed: 16.7ms</div>
+						<div>accumulator: <span style="color:var(--text-xdim);">13.72</span> + <span class="cy">16.7</span> = <span style="color:var(--text-b);">30.42ms</span></div>
+						<div><span class="cr">update(16.67)</span> → 30.42 − 16.67 = <span style="color:var(--text-b);">13.75ms</span></div>
+						<div>Physics ticks: <span style="color:var(--phys); font-weight:700;">1</span> · Remainder: <span style="color:var(--accent2);">13.75ms</span></div>
+						<div><span class="cg">render()</span></div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					Key observations: Frame 3 ran two physics updates to catch up after a stutter. Frame 4 ran zero — there wasn't enough accumulated time for a full tick. Over all 5 frames, <strong>real time and simulation time stay in sync</strong> — physics never falls behind or runs ahead. The remainder carries forward across frames, so no time is lost.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The interpolation problem</h2>
+
+			<p>There's a subtle visual issue. After the physics loop drains, the accumulator still has a remainder — leftover time that's less than one <code>FIXED_DT</code>. When you render, you're showing the physics state from the <em>last completed tick</em>, not from "right now." The rendered frame is always slightly behind real time.</p>
+
+			<p>For most games this is imperceptible (the remainder is at most 16.67ms behind). But for buttery-smooth high-refresh-rate rendering, you can <strong>interpolate</strong> between the last two physics states using the remainder as a blend factor:</p>
+
+			<div class="codeblock"><span class="typ">double</span> alpha = accumulator / FIXED_DT;   <span class="cm">// 0.0 to 1.0</span>
+
+<span class="cm">// Blend between previous and current physics state for rendering</span>
+<span class="typ">Vec3</span> render_pos = <span class="fn">lerp</span>(prev_position, curr_position, alpha);
+<span class="fn">draw</span>(render_pos);</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Interpolation between physics states</div>
+				<div style="font-family:var(--mono); font-size: 12px; text-align: center; padding: 14px 0;">
+					<span class="cr">Physics tick N</span>
+					<span style="color:var(--text-xdim); margin: 0 8px;">──────</span>
+					<span class="cp">◆ render point (alpha=0.6)</span>
+					<span style="color:var(--text-xdim); margin: 0 8px;">────</span>
+					<span class="cr">Physics tick N+1</span>
+				</div>
+				<div style="font-family:var(--mono); font-size: 11px; text-align: center; color:var(--text-dim); padding: 4px 0;">
+					render_pos = prev_pos + (curr_pos − prev_pos) × 0.6
+				</div>
+				<div class="diagram-caption">
+					This means you need to store <strong>two</strong> copies of every renderable physics state: the previous tick and the current tick. The render phase blends between them. This adds memory overhead and complexity — it's why many games skip interpolation entirely and accept the sub-frame latency.
+				</div>
+			</div>
+
+			<div class="callout">
+				<strong>Extrapolation vs. interpolation.</strong> Some engines extrapolate forward from the current state instead of interpolating between two known states. This avoids the one-tick visual delay but introduces prediction errors — objects overshoot and snap back when the next physics tick corrects them. Interpolation is the safer default; extrapolation is used in networked games where latency hiding matters more than visual precision.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The spiral of death</h2>
+
+			<p>What happens if a frame takes 200ms? The accumulator fills up with 200ms of debt. The inner loop runs 12 physics updates to catch up. But running 12 updates takes even longer than running 1, so the <em>next</em> frame takes even longer, accumulating even more debt. This is the <strong>spiral of death</strong> — the simulation can never catch up to real time.</p>
+
+			<p>The standard fix is a frame time clamp:</p>
+
+			<div class="codeblock"><span class="typ">double</span> frame_time = <span class="fn">time_since_last_frame</span>();
+<span class="kw">if</span> (frame_time > <span class="num">0.25</span>)          <span class="cm">// clamp to 250ms max</span>
+    frame_time = <span class="num">0.25</span>;
+accumulator += frame_time;</div>
+
+			<p>With a 250ms clamp, the maximum number of physics updates per frame is <code>ceil(250 / 16.67) = 15</code>. Beyond that, the simulation runs in slow motion rather than trying to catch up — a better outcome than an infinite loop. The exact clamp value is a design decision: too low and the game slows down too easily; too high and a single bad frame causes a cascade of updates.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 4: FRAME PACING                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-pacing">
+
+		<div class="section">
+			<h2>The frame budget</h2>
+
+			<p>At a target framerate, you have a fixed time budget per frame. Everything — input, physics, AI, animation, rendering, audio — must fit within it.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Frame budget at common refresh rates</div>
+				<div class="num-cards">
+					<div class="ncard">
+						<div class="nc-val cy">33.3ms</div>
+						<div class="nc-lbl">30 fps</div>
+					</div>
+					<div class="ncard">
+						<div class="nc-val cy">16.7ms</div>
+						<div class="nc-lbl">60 fps</div>
+					</div>
+					<div class="ncard">
+						<div class="nc-val cy">11.1ms</div>
+						<div class="nc-lbl">90 fps (VR)</div>
+					</div>
+					<div class="ncard">
+						<div class="nc-val cy">6.9ms</div>
+						<div class="nc-lbl">144 fps</div>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					At 144fps, you have <strong>6.9 milliseconds</strong> for everything. A single cache miss on a cold data structure can cost 200ns. A badly placed <code>std::map</code> lookup in a hot loop can blow the entire budget.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>VSync and the display pipeline</h2>
+
+			<p>Monitors refresh at a fixed rate (e.g. 60Hz). Without synchronization, the GPU might push a new frame to the display mid-refresh, causing a horizontal tear — the top half shows the old frame and the bottom half shows the new one.</p>
+
+			<p><strong>VSync</strong> prevents this by making the GPU wait for the monitor's vertical blank interval before swapping buffers. The tradeoff: if you miss the deadline by even 1ms, you wait an entire refresh cycle (~16.7ms at 60Hz), effectively halving your framerate to 30fps for that frame. This causes a visible stutter.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">VSync miss — one late frame costs a full cycle</div>
+				<div class="scroll-hint">
+					<div class="tl-row">
+						<div class="tl-label" style="color:var(--render);">GPU work</div>
+						<div class="tl-track">
+							<div class="tl-block ren" style="width:90px;">15ms</div>
+							<div class="tl-block ren" style="width:106px;">17.2ms</div>
+							<div class="tl-block ren" style="width:90px;">15ms</div>
+							<div class="tl-block ren" style="width:90px;">14ms</div>
+						</div>
+					</div>
+					<div class="tl-row" style="margin-top:4px;">
+						<div class="tl-label" style="color:var(--time);">display</div>
+						<div class="tl-track">
+							<div class="tl-block frame" style="width:100px;">16.7ms</div>
+							<div class="tl-block frame" style="width:200px; background:rgba(232,136,58,0.1); color:var(--warn); border-color:rgba(232,136,58,0.2);">33.3ms (missed!)</div>
+							<div class="tl-block frame" style="width:100px;">16.7ms</div>
+						</div>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					Frame 2 took 17.2ms — just 0.5ms over budget. But with VSync, it can't display until the <em>next</em> blank, so the player sees the previous frame for 33.3ms total. The game stutters even though it was only 3% over budget.
+				</div>
+			</div>
+
+			<p><strong>Adaptive sync</strong> (G-Sync, FreeSync) solves this by letting the monitor match its refresh rate to the GPU's actual output rate. The display waits for the frame instead of the frame waiting for the display. This eliminates both tearing and VSync stutter, but only works on supported hardware.</p>
+		</div>
+
+		<div class="section">
+			<h2>What to do with leftover time</h2>
+
+			<p>If your frame finishes in 11ms at a 60fps target, you have ~5.7ms to spare. Three strategies:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Strategy</th>
+						<th>How</th>
+						<th>Pro</th>
+						<th>Con</th>
+					</tr>
+					<tr>
+						<td><strong>Busy-wait (spin)</strong></td>
+						<td>Loop checking the clock until the deadline</td>
+						<td>Most precise timing; lowest latency to next frame</td>
+						<td>Burns 100% CPU; wastes power; bad for laptops and thermals</td>
+					</tr>
+					<tr>
+						<td><strong>Sleep</strong></td>
+						<td><code>sleep(remaining - margin)</code></td>
+						<td>CPU can idle; power-friendly</td>
+						<td>OS sleep granularity is 1–15ms; you might oversleep and miss the deadline</td>
+					</tr>
+					<tr>
+						<td><strong>Hybrid</strong></td>
+						<td>Sleep for most of the gap, busy-wait the last 1–2ms</td>
+						<td>Low power + precise timing</td>
+						<td>More code; need to tune the margin per platform</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>The hybrid approach is what most shipping engines use. On Windows, you also need <code>timeBeginPeriod(1)</code> to get 1ms sleep resolution instead of the default 15.6ms — without it, <code>Sleep(1)</code> actually sleeps for 15ms.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 5: INTEGRATION                              -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-integration">
+
+		<div class="section">
+			<h2>Where each subsystem plugs in</h2>
+
+			<p>The loop isn't just "update then render." Each subsystem has specific timing requirements that determine where it runs in the frame.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Subsystem execution order within one frame</div>
+				<div class="pipeline" style="gap: 4px; flex-wrap: wrap;">
+					<div class="pipe-stage time">measure dt</div>
+					<div class="pipe-arrow">→</div>
+					<div class="pipe-stage inp">poll input</div>
+					<div class="pipe-arrow">→</div>
+					<div class="pipe-stage acc">accumulate</div>
+					<div class="pipe-arrow">→</div>
+					<div class="pipe-stage phys" style="border-width:2px;">while(acc ≥ dt)<br>physics tick</div>
+					<div class="pipe-arrow">→</div>
+					<div class="pipe-stage" style="color:var(--warn); border-color:rgba(232,136,58,0.25);">animation</div>
+					<div class="pipe-arrow">→</div>
+					<div class="pipe-stage ren">render</div>
+					<div class="pipe-arrow">→</div>
+					<div class="pipe-stage time">swap buffers</div>
+				</div>
+				<div class="diagram-caption" style="margin-top:18px;">
+					The physics tick (red, thicker border) is the inner loop — it may run 0, 1, or several times per frame. Everything outside it runs exactly once per frame.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Subsystem timing contracts</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Subsystem</th>
+						<th>Runs per frame</th>
+						<th>Timestep</th>
+						<th>Why</th>
+					</tr>
+					<tr>
+						<td style="color:var(--input); font-weight:600;">Input</td>
+						<td>1</td>
+						<td>N/A (event-based)</td>
+						<td>Must be polled once per frame for responsiveness. Polling inside the physics loop would re-read stale input buffers.</td>
+					</tr>
+					<tr>
+						<td style="color:var(--phys); font-weight:600;">Physics</td>
+						<td>0–N</td>
+						<td>Fixed (FIXED_DT)</td>
+						<td>Determinism, stability, and collision detection require fixed steps.</td>
+					</tr>
+					<tr>
+						<td style="color:var(--warn); font-weight:600;">Gameplay / AI</td>
+						<td>Usually 1</td>
+						<td>Variable (dt) or fixed</td>
+						<td>Game logic (state machines, cooldowns, spawning) usually runs at frame rate. Some engines tick AI at a lower rate (e.g. 10Hz) for performance.</td>
+					</tr>
+					<tr>
+						<td style="color:var(--warn); font-weight:600;">Animation</td>
+						<td>1</td>
+						<td>Variable (dt)</td>
+						<td>Bone transforms, blend trees, and IK need to match the render frame exactly, not the physics tick.</td>
+					</tr>
+					<tr>
+						<td style="color:var(--render); font-weight:600;">Rendering</td>
+						<td>1</td>
+						<td>N/A (presents once)</td>
+						<td>One frame submission per iteration. May interpolate physics state.</td>
+					</tr>
+					<tr>
+						<td style="color:var(--accent2); font-weight:600;">Audio</td>
+						<td>Async</td>
+						<td>Own thread / callback</td>
+						<td>Audio runs on a separate high-priority thread with its own buffer deadline (typically 5–10ms). The game loop just sends events.</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Input and the physics loop</h2>
+
+			<p>A common design question: should input be polled inside or outside the physics inner loop?</p>
+
+			<div class="compare-cols">
+				<div class="compare-col">
+					<h3 style="color:var(--render);">Poll outside (standard)</h3>
+					<p style="font-size:13px;">Input is captured once per frame. All physics ticks in that frame see the same input snapshot. Simpler, lower latency to screen.</p>
+					<div class="codeblock" style="font-size:11px; margin:8px 0;"><span class="fn">poll_input</span>();
+<span class="kw">while</span> (acc >= FIXED_DT) {
+    <span class="fn">update</span>(FIXED_DT, input);
+    acc -= FIXED_DT;
+}
+<span class="fn">render</span>();</div>
+				</div>
+				<div class="compare-col">
+					<h3 style="color:var(--phys);">Poll inside (for fighting games)</h3>
+					<p style="font-size:13px;">Input is re-polled before every physics tick. Lets you capture mid-frame input changes. Used when frame-perfect input matters (fighting games, rhythm games).</p>
+					<div class="codeblock" style="font-size:11px; margin:8px 0;"><span class="kw">while</span> (acc >= FIXED_DT) {
+    <span class="fn">poll_input</span>();
+    <span class="fn">update</span>(FIXED_DT, input);
+    acc -= FIXED_DT;
+}
+<span class="fn">render</span>();</div>
+				</div>
+			</div>
+
+			<p>For most games, polling outside is the right default. If you need frame-perfect input, polling inside gives you sub-frame resolution at the cost of slightly more input processing overhead.</p>
+		</div>
+
+		<div class="section">
+			<h2>Threading implications</h2>
+
+			<p>Your loop design constrains your threading model. The single-threaded accumulator loop is the baseline. More complex engines thread subsystems off the main loop, but the dependencies create a DAG (directed acyclic graph) of work that must be respected:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Common threading splits</div>
+				<div style="font-family:var(--mono); font-size: 12px; line-height: 2.2;">
+					<div style="margin-bottom: 12px;">
+						<span style="color:var(--text-b); font-weight: 600;">Single-threaded</span>
+						<span style="color:var(--text-dim);"> — everything sequential on the main thread. Simplest. Where you should start.</span>
+					</div>
+					<div style="margin-bottom: 12px;">
+						<span style="color:var(--time); font-weight: 600;">Render on separate thread</span>
+						<span style="color:var(--text-dim);"> — main thread does input+physics+gameplay, render thread consumes a snapshot. Requires double-buffering all renderable state. Classic "game thread / render thread" split.</span>
+					</div>
+					<div style="margin-bottom: 12px;">
+						<span style="color:var(--accent2); font-weight: 600;">Job system</span>
+						<span style="color:var(--text-dim);"> — the loop kicks off parallel jobs (physics broadphase, animation, culling) and synchronizes at barriers. Most complex but scales to many cores. This is where Unity DOTS and Unreal's task graph live.</span>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					<strong>The rule:</strong> don't thread until you've profiled and found a bottleneck. A well-structured single-threaded loop on modern hardware handles an enormous amount of work. Threading introduces synchronization bugs, data races, and dramatically increases debugging difficulty. Start single-threaded, profile, then thread the specific bottleneck.
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB 6: IMPLEMENTATION                           -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-impl">
+
+		<div class="section">
+			<h2>Timer precision</h2>
+
+			<p>The entire accumulator pattern depends on accurately measuring elapsed time. A 1ms error in a 16.7ms frame is a 6% timing error — enough to cause visible stutters. Platform-specific high-resolution timers:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Platform</th>
+						<th>API</th>
+						<th>Resolution</th>
+						<th>Notes</th>
+					</tr>
+					<tr>
+						<td>Windows</td>
+						<td><code>QueryPerformanceCounter</code></td>
+						<td>~100ns</td>
+						<td>Always use with <code>QueryPerformanceFrequency</code>. Don't use <code>GetTickCount</code> (15ms resolution).</td>
+					</tr>
+					<tr>
+						<td>Linux / macOS</td>
+						<td><code>clock_gettime(CLOCK_MONOTONIC)</code></td>
+						<td>~1ns</td>
+						<td>Monotonic means it never jumps backward (unlike wall-clock time during NTP adjustments).</td>
+					</tr>
+					<tr>
+						<td>C# / Unity</td>
+						<td><code>Stopwatch.GetTimestamp()</code></td>
+						<td>~100ns</td>
+						<td>Uses QPC on Windows. <code>DateTime.Now</code> is <strong>not</strong> suitable — it has ~15ms resolution and isn't monotonic.</td>
+					</tr>
+					<tr>
+						<td>Cross-platform C</td>
+						<td><code>SDL_GetPerformanceCounter</code></td>
+						<td>Platform-dependent</td>
+						<td>Wraps the best available timer per OS.</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout warn">
+				<strong>Never use <code>time()</code> or <code>gettimeofday()</code> for frame timing.</strong> Both return wall-clock time, which jumps during NTP corrections, daylight saving transitions, or manual clock changes. A monotonic clock only ever moves forward, which is what the accumulator requires.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Use doubles, not floats</h2>
+
+			<p>A 32-bit <code>float</code> has ~7 decimal digits of precision. After the game runs for 4+ hours, a float storing "seconds since start" loses sub-millisecond precision — <code>14400.0 + 0.0001</code> rounds to <code>14400.0</code>. Your delta time calculations become noisy, causing physics jitter.</p>
+
+			<p>Always store time values as <code>double</code> (15–16 significant digits). Or store time as a 64-bit integer in nanoseconds or microseconds and convert to a float <code>dt</code> only at the last moment. Unity's <code>Time.deltaTime</code> is a <code>float</code>, which is one reason long Unity play sessions can develop subtle timing artifacts.</p>
+		</div>
+
+		<div class="section">
+			<h2>First frame handling</h2>
+
+			<p>The very first call to <code>time_since_last_frame()</code> will return garbage — either zero (no previous frame) or a huge value (time since process start, including asset loading). Always initialize the "previous time" timestamp immediately before entering the loop, and clamp the first <code>dt</code>:</p>
+
+			<div class="codeblock"><span class="typ">double</span> prev_time = <span class="fn">get_time</span>();   <span class="cm">// ← capture RIGHT before the loop</span>
+<span class="typ">double</span> accumulator = <span class="num">0.0</span>;
+
+<span class="kw">while</span> (running) {
+    <span class="typ">double</span> now = <span class="fn">get_time</span>();
+    <span class="typ">double</span> frame_time = now - prev_time;
+    prev_time = now;
+
+    <span class="cm">// Clamp: prevents spiral of death AND handles first-frame spike</span>
+    <span class="kw">if</span> (frame_time > <span class="num">0.25</span>) frame_time = <span class="num">0.25</span>;
+
+    accumulator += frame_time;
+    <span class="cm">// ... rest of loop</span>
+}</div>
+		</div>
+
+		<div class="section">
+			<h2>Choosing your physics rate</h2>
+
+			<p>The physics tick rate (<code>1 / FIXED_DT</code>) doesn't have to match the display refresh rate. Common choices:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Rate</th>
+						<th>FIXED_DT</th>
+						<th>Use case</th>
+					</tr>
+					<tr>
+						<td>30 Hz</td>
+						<td>33.3ms</td>
+						<td>Slow simulations, RTS games, turn-based with physics garnish</td>
+					</tr>
+					<tr>
+						<td>60 Hz</td>
+						<td>16.67ms</td>
+						<td>Standard for most games. Good balance of accuracy and performance.</td>
+					</tr>
+					<tr>
+						<td>120 Hz</td>
+						<td>8.33ms</td>
+						<td>Fast action games, VR, where collision precision matters.</td>
+					</tr>
+					<tr>
+						<td>240 Hz</td>
+						<td>4.17ms</td>
+						<td>Fighting games, competitive shooters. Expensive — 4× the physics work of 60Hz.</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Higher rates = more stable physics (smaller steps = less integration error) but more CPU cost. If your rendering runs at 144fps but physics at 60Hz, you'll get ~2.4 physics ticks per rendered frame on average, with interpolation smoothing the visual result.</p>
+		</div>
+
+		<div class="section">
+			<h2>Complete reference loop</h2>
+
+			<div class="codeblock"><span class="kw">const</span> <span class="typ">double</span> FIXED_DT = <span class="num">1.0</span> / <span class="num">60.0</span>;
+<span class="kw">const</span> <span class="typ">double</span> MAX_FRAME_TIME = <span class="num">0.25</span>;
+
+<span class="typ">double</span> prev_time = <span class="fn">get_time</span>();
+<span class="typ">double</span> accumulator = <span class="num">0.0</span>;
+<span class="typ">State</span> previous_state, current_state;
+
+<span class="kw">while</span> (running) {
+    <span class="typ">double</span> now = <span class="fn">get_time</span>();
+    <span class="typ">double</span> frame_time = <span class="fn">min</span>(now - prev_time, MAX_FRAME_TIME);
+    prev_time = now;
+
+    accumulator += frame_time;
+
+    <span class="fn">poll_input</span>();
+
+    <span class="kw">while</span> (accumulator >= FIXED_DT) {
+        previous_state = current_state;
+        <span class="fn">physics_update</span>(&current_state, FIXED_DT);
+        accumulator -= FIXED_DT;
+    }
+
+    <span class="typ">double</span> alpha = accumulator / FIXED_DT;
+    <span class="typ">State</span> render_state = <span class="fn">lerp</span>(previous_state, current_state, alpha);
+
+    <span class="fn">render</span>(render_state);
+    <span class="fn">swap_buffers</span>();
+}</div>
+
+			<div class="diagram-caption" style="margin-top: 12px; padding: 0 4px;">
+				This is the "Fix Your Timestep" loop from Glenn Fiedler's canonical article. All four pieces are present: <span class="cy">frame time measurement with clamp</span>, <span class="cr">fixed-step physics with accumulator drain</span>, <span class="cp">interpolation for smooth rendering</span>, and <span class="cg">decoupled render submission</span>.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Cheat sheet</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Concept</th>
+						<th>Key point</th>
+					</tr>
+					<tr>
+						<td>Variable dt</td>
+						<td>Simple but non-deterministic. Fine for UI, bad for physics.</td>
+					</tr>
+					<tr>
+						<td>Fixed dt</td>
+						<td>Deterministic but can't handle variable frame times alone.</td>
+					</tr>
+					<tr>
+						<td>Accumulator</td>
+						<td>Best of both: fixed physics, variable rendering. Industry standard.</td>
+					</tr>
+					<tr>
+						<td>Spiral of death</td>
+						<td>Clamp <code>frame_time</code> to a max (200–250ms typical).</td>
+					</tr>
+					<tr>
+						<td>Interpolation</td>
+						<td><code>alpha = acc / FIXED_DT</code>, lerp between prev and current state.</td>
+					</tr>
+					<tr>
+						<td>Timer API</td>
+						<td>Always monotonic, always high-resolution. Never wall-clock.</td>
+					</tr>
+					<tr>
+						<td>Time storage</td>
+						<td><code>double</code>, not <code>float</code>. Or integer nanoseconds.</td>
+					</tr>
+					<tr>
+						<td>Sleep strategy</td>
+						<td>Hybrid: sleep most of the gap, spin the last 1–2ms.</td>
+					</tr>
+					<tr>
+						<td>First frame</td>
+						<td>Init <code>prev_time</code> right before the loop. Clamp covers the rest.</td>
+					</tr>
+					<tr>
+						<td>Threading</td>
+						<td>Start single-threaded. Profile first. Thread the bottleneck.</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+	</div>
+
+</div>
+
+<script>
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
