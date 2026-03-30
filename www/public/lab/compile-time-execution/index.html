@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Compile-Time Code Execution — The Problem Space</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+          /* Subsystem colors: compile-time theme */
+          --ct: #e8883a;       /* compile-time orange */
+          --ct-dim: rgba(232, 136, 58, 0.09);
+          --rt: #3d9be8;       /* runtime blue */
+          --rt-dim: rgba(61, 155, 232, 0.09);
+          --gen: #4dc462;      /* generated/output green */
+          --gen-dim: rgba(77, 196, 98, 0.09);
+          --err: #f06565;      /* error/problem red */
+          --err-dim: rgba(240, 101, 101, 0.09);
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+          --c0: #f06565;
+          --c1: #e8b834;
+          --c2: #4dc462;
+          --c3: #3d9be8;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      .page { max-width: 1080px; margin: 0 auto; padding: 48px 24px 100px; }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      /* ── Tabs ── */
+      .tab-bar {
+          display: flex; gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          justify-content: center;
+      }
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px; font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none; border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+      .tab-btn:hover { color: var(--text); background: var(--surface2); }
+      .tab-btn.active { color: #fff; background: var(--accent); }
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; animation: fadeIn 0.2s ease; }
+      @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* ── Prose ── */
+      .section { margin-bottom: 40px; }
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px; font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+      .section p { margin-bottom: 14px; }
+      .section p:last-child { margin-bottom: 0; }
+      strong { color: var(--text-b); font-weight: 600; }
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      /* ── Diagrams ── */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px; font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* ── Codeblock ── */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+          white-space: pre;
+      }
+
+      /* ── Callout ── */
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+      .callout.err {
+          background: rgba(240, 101, 101, 0.06);
+          border-color: rgba(240, 101, 101, 0.14);
+      }
+
+      /* ── Table ── */
+      .tbl-wrap { overflow-x: auto; margin: 16px 0; }
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600; font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+          vertical-align: top;
+      }
+      tr:last-child td { border-bottom: none; }
+
+      /* ── Pipeline / Flow ── */
+      .pipeline {
+          display: flex;
+          align-items: center;
+          gap: 0;
+          flex-wrap: wrap;
+          justify-content: center;
+          padding: 12px 0;
+      }
+      .pipe-node {
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 10px 16px;
+          text-align: center;
+          font-family: var(--mono);
+          font-size: 12px;
+          flex-shrink: 0;
+      }
+      .pipe-node .pn-main {
+          font-weight: 600;
+          font-size: 13px;
+      }
+      .pipe-node .pn-sub {
+          font-size: 9px;
+          color: var(--text-dim);
+          margin-top: 2px;
+      }
+      .pipe-arrow {
+          font-family: var(--mono);
+          color: var(--text-xdim);
+          font-size: 14px;
+          padding: 0 8px;
+          flex-shrink: 0;
+      }
+
+      /* ── Colored helpers ── */
+      .cr { color: var(--c0); }
+      .cy { color: var(--c1); }
+      .cg { color: var(--c2); }
+      .cb { color: var(--c3); }
+      .cp { color: var(--accent2); }
+      .co { color: var(--ct); }
+
+      /* ── Comparison cards ── */
+      .compare-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin: 16px 0;
+      }
+      .compare-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 16px 18px;
+      }
+      .compare-card h3 {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 10px;
+      }
+      .compare-card p {
+          font-size: 14px;
+          line-height: 1.6;
+      }
+      .compare-card ul {
+          margin: 8px 0 0 0;
+          padding-left: 18px;
+          font-size: 13px;
+          line-height: 1.7;
+      }
+
+      /* ── Phase diagram ── */
+      .phase-row {
+          display: flex;
+          align-items: stretch;
+          margin-bottom: 2px;
+      }
+      .phase-label {
+          width: 140px;
+          flex-shrink: 0;
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 600;
+          padding: 10px 14px 10px 0;
+          text-align: right;
+      }
+      .phase-bar {
+          flex: 1;
+          border-radius: 4px;
+          padding: 10px 14px;
+          font-family: var(--mono);
+          font-size: 11px;
+          line-height: 1.5;
+      }
+
+      @media (max-width: 640px) {
+          .tab-btn { font-size: 10px; padding: 7px 10px; }
+          .compare-grid { grid-template-columns: 1fr; }
+          .phase-label { width: 90px; font-size: 9px; }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<a class="back-link" href="/lab/"
+		style="font-family:var(--mono);font-size:11px;color:var(--text-dim);text-decoration:none;display:inline-block;margin-bottom:24px;letter-spacing:0.3px;">←
+		back to lab</a>
+
+	<div class="page-header">
+		<h1>compile-time code execution</h1>
+		<div class="sub">the problem space · jai · zig · c/c++ · why metaprogramming matters for engines</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="problem">The Problem</button>
+		<button class="tab-btn" data-tab="landscape">C/C++ Approaches</button>
+		<button class="tab-btn" data-tab="jai">Jai's Model</button>
+		<button class="tab-btn" data-tab="compiler">Compiler as API</button>
+		<button class="tab-btn" data-tab="zig">Zig's comptime</button>
+		<button class="tab-btn" data-tab="tradeoffs">Tradeoffs</button>
+	</div>
+
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE PROBLEM                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-problem">
+
+		<div class="section">
+			<h2>What "compile-time execution" means</h2>
+
+			<p>The idea is simple: <strong>run arbitrary code during compilation, using the same language you're already writing in, and fold the results into the final binary.</strong> Not a separate macro language. Not a template system. Not an external code generator. The same functions you call at runtime, but executed by the compiler.</p>
+
+			<p>This is different from what most compilers already do (constant folding, dead code elimination). Those are optimizations the compiler performs silently. Compile-time execution is programmer-directed: you explicitly say "evaluate this now, at compile time" and use the result as if it were a literal.</p>
+		</div>
+
+		<div class="section">
+			<h2>Why game engines need this</h2>
+
+			<p>Game engines hit a specific class of problems that are all variations of the same underlying issue: <strong>code that needs to know about your types.</strong> C and C++ give you almost no clean way to do this, so engines accumulate layers of external tooling to compensate.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">The four recurring problems</div>
+
+				<div style="display:grid; grid-template-columns: auto 1fr; gap: 2px 16px; font-family:var(--mono); font-size:12px; line-height:2.2;">
+					<span style="color:var(--c0); font-weight:600;">Serialization</span>
+					<span>Every struct needs a save/load function. Change a field, forget to update the serializer → silent data corruption. In C you write these by hand. In C++ you abuse templates or use an external IDL (protobuf, FlatBuffers).</span>
+
+					<span style="color:var(--c1); font-weight:600;">Editor UI</span>
+					<span>Click an entity in your editor, see its fields with sliders and color pickers. Requires knowing "struct Transform has a field position of type Vec3" — runtime reflection. C has none. C++ has RTTI but it's useless for this. Engines build their own with macros (<code>UPROPERTY()</code>) or external header parsers.</span>
+
+					<span style="color:var(--c2); font-weight:600;">SOA transforms</span>
+					<span>You write <code>struct Particle { pos, vel, life }</code> in AOS because it's natural. For cache performance you want SOA: separate arrays per field. Maintaining both layouts by hand is duplication. C++ template approaches are unreadable.</span>
+
+					<span style="color:var(--c3); font-weight:600;">Build config</span>
+					<span>C/C++ projects use CMake, Make, Ninja, or Python scripts. The build system is a separate language from the code it builds. Every project has its own dialect of build-system pain.</span>
+				</div>
+			</div>
+
+			<p>All four problems share the same shape: you need a program that <strong>inspects your code's structure</strong> (types, fields, dependencies) and <strong>generates more code</strong> based on what it finds. The question is where and how that program runs.</p>
+		</div>
+
+		<div class="section">
+			<h2>The spectrum of solutions</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">Where does the "type-aware code" run?</div>
+
+				<div class="phase-row">
+					<div class="phase-label" style="color:var(--c0);">External tool</div>
+					<div class="phase-bar" style="background:var(--err-dim); border:1px solid rgba(240,101,101,0.15);">
+						Separate language, separate build step. Protobuf, Qt MOC, Unreal Header Tool. <strong>Maximum friction.</strong> Different language, different debugger, generated code you can't easily read.
+					</div>
+				</div>
+				<div class="phase-row">
+					<div class="phase-label" style="color:var(--c1);">Preprocessor</div>
+					<div class="phase-bar" style="background:rgba(232,184,52,0.06); border:1px solid rgba(232,184,52,0.12);">
+						C macros. Text substitution before the compiler sees the code. No type awareness, no debugging, no recursion. Error messages reference expanded code you never wrote.
+					</div>
+				</div>
+				<div class="phase-row">
+					<div class="phase-label" style="color:var(--c3);">Template system</div>
+					<div class="phase-bar" style="background:var(--rt-dim); border:1px solid rgba(61,155,232,0.12);">
+						C++ templates. Technically Turing-complete. In practice: a functional language accidentally embedded in a type system. Catastrophic error messages, compile time explosion, unreadable code.
+					</div>
+				</div>
+				<div class="phase-row">
+					<div class="phase-label" style="color:var(--c2);">Same language</div>
+					<div class="phase-bar" style="background:var(--gen-dim); border:1px solid rgba(77,196,98,0.15);">
+						Jai, Zig, (partially) D. Write normal imperative code, mark it to run at compile time. Same syntax, same debuggability, same mental model. <strong>Minimum friction.</strong>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					The further down this list, the less friction between "writing code" and "writing code that generates code." Jai's bet is that the bottom row should be the default, not the exception.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The Blow thesis</h2>
+
+			<div class="callout">
+				<strong>"There are many features I can get rid of and it would still be the same programming language. If I got rid of full arbitrary compile-time execution, it wouldn't be the same programming language. What I mean by 'full' here is — many compilers have some limited set of expressions they'll evaluate at compile time. There's constexpr in C++ and languages like D or Rust try to formalize in order to give you more versatility. My approach is: why are you doing that? Let's do everything at compile time. And by everything, I mean everything."</strong>
+				<div style="font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-top:8px;">— Jonathan Blow</div>
+			</div>
+
+			<p>The key distinction: Jai doesn't add compile-time execution as a feature on top of an existing language. The entire compiler is structured around it. The build system, the code generation, the type introspection — they're all the same mechanism.</p>
+		</div>
+
+	</div>
+
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: C/C++ APPROACHES                           -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-landscape">
+
+		<div class="section">
+			<h2>C preprocessor macros</h2>
+
+			<p>The C preprocessor operates on text before the compiler sees it. It has no concept of types, scopes, or expressions — it's string substitution with conditionals.</p>
+
+			<div class="codeblock">// "Reflection" via X-macros — the C workaround
+#define ENTITY_FIELDS(X) \
+    X(float, x)          \
+    X(float, y)          \
+    X(int,   health)     \
+    X(int,   armor)
+
+typedef struct {
+    #define FIELD(type, name) type name;
+    ENTITY_FIELDS(FIELD)
+    #undef FIELD
+} Entity;
+
+void serialize_entity(Entity* e, FILE* f) {
+    #define FIELD(type, name) fwrite(&e->name, sizeof(type), 1, f);
+    ENTITY_FIELDS(FIELD)
+    #undef FIELD
+}</div>
+
+			<p>This works, barely. The field list is defined once and expanded into both the struct definition and the serializer. But the cost is severe: the code is unreadable, undebugable (breakpoints land on the macro expansion, not the definition), and the error messages when you get it wrong reference code you never wrote. You also can't do anything conditional — if you want to skip a field during serialization based on its type, you're out of luck without nesting more macros.</p>
+		</div>
+
+		<div class="section">
+			<h2>C++ template metaprogramming</h2>
+
+			<p>C++ templates are Turing-complete by accident. They were designed for generic containers (<code>vector&lt;int&gt;</code>), but people discovered you could compute with them at compile time by exploiting template specialization as a form of pattern matching.</p>
+
+			<div class="codeblock">// Computing factorial at compile time via templates
+// This is "programming" in C++'s type system
+template&lt;int N&gt;
+struct Factorial {
+    static constexpr int value = N * Factorial&lt;N-1&gt;::value;
+};
+
+template&lt;&gt;
+struct Factorial&lt;0&gt; {
+    static constexpr int value = 1;
+};
+
+// Usage: Factorial&lt;7&gt;::value == 5040
+// Try getting a useful error message when this goes wrong.</div>
+
+			<p>This is functional programming encoded in a type system that was never designed for it. The "variables" are template parameters, the "functions" are template specializations, and "recursion" is nested template instantiation. It works, but the practical consequences are devastating:</p>
+
+			<div class="compare-grid">
+				<div class="compare-card">
+					<h3 style="color:var(--c0);">Compile times</h3>
+					<p>Each template instantiation creates a new type. Heavy template use (Boost, Eigen, ranges) can push compile times to <strong>minutes or hours</strong>. One blogger reported a 19,000-line C++ project taking 45 minutes to compile.</p>
+				</div>
+				<div class="compare-card">
+					<h3 style="color:var(--c1);">Error messages</h3>
+					<p>A misuse of <code>std::ranges</code> or Boost.Spirit can produce error messages that are <strong>thousands of lines long</strong>, referencing deeply nested template instantiations that have no connection to your source code.</p>
+				</div>
+				<div class="compare-card">
+					<h3 style="color:var(--c3);">Debuggability</h3>
+					<p>You can't step through template metaprogramming. It happens in the compiler's type-checker, not in any executable. There's no printf, no breakpoints, no way to inspect intermediate results.</p>
+				</div>
+				<div class="compare-card">
+					<h3 style="color:var(--accent2);">Readability</h3>
+					<p>Template metaprograms use a completely different programming paradigm (functional, pattern-matched) from the imperative C++ they generate. Two mental models in one file.</p>
+				</div>
+			</div>
+
+			<p>C++11 introduced <code>constexpr</code> to improve the situation — allowing normal-looking functions to run at compile time. But <code>constexpr</code> is heavily restricted: no allocations (until C++20), no I/O, no complex control flow in early versions. It's a whitelist approach — you can do X, Y, Z at compile time but nothing else. Jai's position is: <strong>why whitelist? Just run everything.</strong></p>
+		</div>
+
+		<div class="section">
+			<h2>External code generators</h2>
+
+			<p>When macros and templates aren't enough, large C++ projects add external tools that parse header files and generate code:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Tool</th>
+						<th>Engine / Project</th>
+						<th>What it does</th>
+						<th>Cost</th>
+					</tr>
+					<tr>
+						<td><code>UHT</code></td>
+						<td>Unreal Engine</td>
+						<td>Parses <code>UPROPERTY()</code> / <code>UCLASS()</code> macros, generates reflection data, serialization, editor bindings</td>
+						<td>Separate C++ tool (~50k LOC), must run before compilation, adds minutes to build</td>
+					</tr>
+					<tr>
+						<td><code>MOC</code></td>
+						<td>Qt</td>
+						<td>Parses <code>Q_OBJECT</code>, <code>signals:</code>, <code>slots:</code>, generates signal/slot dispatch code</td>
+						<td>Separate preprocessor, custom build integration, generated files in build dir</td>
+					</tr>
+					<tr>
+						<td><code>protoc</code></td>
+						<td>gRPC / many</td>
+						<td>Compiles <code>.proto</code> schema files into C++/Go/etc serialization code</td>
+						<td>Separate language (protobuf IDL), separate compiler, generated code is verbose and hard to debug</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Each of these is a <strong>shadow compiler</strong> — a separate program that understands some subset of your code's structure and emits more code. The generated code is typically committed to version control or placed in a build directory. It's not part of your source; it's an artifact that exists between your code and the real compiler.</p>
+
+			<div class="callout warn">
+				<strong>The meta-problem:</strong> Every external code generator introduces a new language, a new build dependency, a new failure mode, and a class of bugs that exist only in the gap between "what you wrote" and "what the generator produced." The motivation for compile-time execution in Jai and Zig is to eliminate this entire category.
+			</div>
+		</div>
+	</div>
+
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: JAI'S MODEL                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-jai">
+
+		<div class="section">
+			<h2>The core primitives</h2>
+
+			<p>Jai's compile-time system is built from a small set of composable directives. Each one does one thing. Together they cover the full range from "compute a constant" to "rewrite the program's AST during compilation."</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Directive</th>
+						<th>What it does</th>
+						<th>Scope</th>
+					</tr>
+					<tr>
+						<td><code>#run</code></td>
+						<td>Execute a function or block at compile time. The result is folded into the binary.</td>
+						<td>Any expression position. Can return values, modify globals (with <code>#no_reset</code>), or call the compiler API.</td>
+					</tr>
+					<tr>
+						<td><code>#insert</code></td>
+						<td>Insert a string or <code>Code</code> value into the program as source code.</td>
+						<td>Any statement position. The inserted code is compiled normally after insertion.</td>
+					</tr>
+					<tr>
+						<td><code>#code</code></td>
+						<td>Capture a block of code as a first-class value of type <code>Code</code>.</td>
+						<td>Can be passed to functions, inspected at compile time via <code>compiler_get_nodes</code>, or inserted with <code>#insert</code>.</td>
+					</tr>
+					<tr>
+						<td><code>#no_reset</code></td>
+						<td>Preserve a global's compile-time modifications into the runtime binary.</td>
+						<td>Global variables only. Without this, globals are reset to their initial values after all <code>#run</code> directives finish.</td>
+					</tr>
+					<tr>
+						<td><code>#compile_time</code></td>
+						<td>Boolean that's <code>true</code> during compile-time execution, <code>false</code> at runtime.</td>
+						<td>Conditional blocks. Lets the same function behave differently depending on when it runs.</td>
+					</tr>
+					<tr>
+						<td><code>#placeholder</code></td>
+						<td>Declare that an identifier will be defined by a metaprogram, not by source code.</td>
+						<td>Module level. Tells the compiler "don't error on this undefined name — it's coming."</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>#run — the foundation</h2>
+
+			<p>Any function can be executed at compile time. No special annotation on the function itself — you mark the <em>call site</em>, not the definition. The compiler builds the function to an internal bytecode and runs it in an interpreter.</p>
+
+			<div class="codeblock">// Compute PI at compile time using the Leibniz formula.
+// compute_pi is a normal function — nothing special about its definition.
+PI :: #run compute_pi();
+
+compute_pi :: () -> float {
+    n := 1.0;
+    s := 1.0;
+    pi := 0.0;
+    for 0..10000 {
+        pi += 1.0 / (s * n);
+        n += 2.0;
+        s = -s;
+    }
+    return pi * 4.0;
+}</div>
+
+			<p>After compilation, <code>PI</code> is a compile-time constant — the float literal <code>3.14159...</code> is embedded directly in the binary. No runtime computation, no initialization function. The same code could be called at runtime too; it's just a function.</p>
+
+			<p>Values can depend on each other. The compiler resolves dependencies automatically:</p>
+
+			<div class="codeblock">a := #run f1();          // a = 1000
+b := #run f2(a);         // b = 1001, depends on a
+
+f1 :: () => 1000;
+f2 :: (a) => a + 1;</div>
+		</div>
+
+		<div class="section">
+			<h2>#insert — code generation via strings</h2>
+
+			<p><code>#insert</code> takes a string and splices it into the program as source code. Combined with <code>#run</code>, this gives you arbitrary code generation: run a function at compile time that returns a string, then insert that string as code.</p>
+
+			<div class="codeblock">// Unrolling a loop at compile time
+unroll_for_loop :: (a: int, b: int, body: Code) #expand {
+    #insert -> string {
+        builder: String_Builder;
+        print_to_builder(*builder, "{\n");
+        print_to_builder(*builder, "`it: int;\n");
+        for i: a..b {
+            print_to_builder(*builder, "it = %;\n", i);
+            print_to_builder(*builder, "#insert body;\n");
+        }
+        print_to_builder(*builder, "}\n");
+        return builder_to_string(*builder);
+    }
+}
+
+// Usage:
+unroll_for_loop(0, 3, #code {
+    print("%\n", it);
+});
+
+// The compiler sees, after expansion:
+// { it: int; it = 0; print(...); it = 1; print(...); it = 2; ... }</div>
+
+			<p>The <code>#insert -> string { ... }</code> syntax is shorthand for <code>#insert #run (function that returns a string)</code>. The function runs at compile time, produces a string, and that string becomes source code.</p>
+		</div>
+
+		<div class="section">
+			<h2>#insert,scope — zero-cost callbacks</h2>
+
+			<p>A common pattern: you want a sort function that takes a comparison, but you don't want the overhead of a function pointer. <code>#insert,scope</code> splices code into the caller's scope, so the inserted code can access local variables directly:</p>
+
+			<div class="codeblock">bubble_sort :: (arr: [] $T, compare_code: Code) #expand {
+    for 0..arr.count-1 {
+        for i: 1..arr.count-1 {
+            a := arr[i-1];
+            b := arr[i];
+            if !(#insert,scope() compare_code) {
+                arr[i-1], arr[i] = arr[i], arr[i-1];
+            }
+        }
+    }
+}
+
+// Usage — the comparison is inlined, no function pointer:
+bubble_sort(my_array, #code (a < b));</div>
+
+			<div class="callout">
+				<strong>Key insight:</strong> <code>#code (a &lt; b)</code> captures the expression as a compile-time value. <code>#insert,scope()</code> splices it into the sort's inner loop where <code>a</code> and <code>b</code> are local variables. The result is a fully inlined sort with a custom comparator — zero overhead compared to a hand-written loop.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>#no_reset — baking data into the binary</h2>
+
+			<p>By default, global variables modified during <code>#run</code> are reset to their initial values before the final binary is emitted. This prevents accidental state leaks from compile-time execution. But sometimes you <em>want</em> to bake computed data into the binary:</p>
+
+			<div class="codeblock">#no_reset lookup_table: [256] u8;
+
+#run {
+    // Populate the table at compile time
+    for i: 0..255 {
+        lookup_table[i] = cast(u8) (i * i % 256);
+    }
+}
+
+// At runtime, lookup_table is pre-populated — no initialization needed.
+main :: () {
+    print("%\n", lookup_table[42]);  // just a table read
+}</div>
+
+			<p>Blow has demonstrated this taken to the extreme: running an entire game during compilation and baking the resulting game state into the binary. The compiler's bytecode interpreter can execute anything the language can express — including graphics, sound, and network I/O.</p>
+		</div>
+
+		<div class="section">
+			<h2>Type introspection</h2>
+
+			<p>Jai retains full static type information for every struct at both compile time and runtime. You can iterate over a struct's fields, inspect their types, offsets, and names — and use this information to generate code.</p>
+
+			<div class="codeblock">// Jai stores a table of all type information in the data segment.
+// You can iterate over it:
+for info: type_table {
+    if info.type == .STRUCT {
+        s := cast(*Type_Info_Struct) info;
+        print("Struct: %\n", s.name);
+        for member: s.members {
+            print("  field: % (type: %)\n", member.name, member.type);
+        }
+    }
+}</div>
+
+			<p>This is the foundation for automatic serialization, editor GUIs, and network replication — all the problems listed in Tab 1. Instead of an external tool that parses your headers, the compiler itself knows your types and makes that knowledge available to your code.</p>
+
+			<div class="callout">
+				<strong>Serialization in practice:</strong> The Jai community has built serialization modules that use type info to generate bespoke serialization code for each struct at compile time. A single <code>serialize(*data)</code> call handles any struct — the generated code is specialized per type, so it's as fast as hand-written serialization but requires zero manual field-by-field code.
+			</div>
+		</div>
+
+	</div>
+
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: COMPILER AS API                            -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-compiler">
+
+		<div class="section">
+			<h2>The build system is Jai</h2>
+
+			<p>In most languages, the build system is a separate program written in a separate language: Make, CMake, Ninja, Cargo, go build. Jai eliminates this by making the build system a compile-time Jai program. You write a <code>build()</code> function, mark it with <code>#run</code>, and it drives the compiler directly.</p>
+
+			<div class="codeblock">#import "Basic";
+#import "Compiler";
+
+build :: () {
+    w := compiler_create_workspace();
+    if !w { print("Workspace creation failed.\n"); return; }
+
+    options := get_build_options(w);
+    options.output_executable_name = "my_game";
+    options.backend = .LLVM;
+    set_optimization(*options, .OPTIMIZED);
+    set_build_options(options, w);
+
+    add_build_file("main.jai", w);
+}
+
+#run build();</div>
+
+			<p>No CMakeLists.txt. No Makefile. No build.gradle. It's just Jai code. The same language you write your game in is the language you configure your build with. And since it's real code, you can use conditionals, loops, read files, compute values — anything.</p>
+		</div>
+
+		<div class="section">
+			<h2>Workspaces</h2>
+
+			<p>A <strong>workspace</strong> is an isolated compilation environment. You can create multiple workspaces from a single build script — each compiles independently with its own options, source files, and output. Workspaces don't share namespaces or modules.</p>
+
+			<div class="codeblock">build :: () {
+    // Build the game
+    game_ws := compiler_create_workspace("Game");
+    opts := get_build_options(game_ws);
+    opts.output_executable_name = "game";
+    set_build_options(opts, game_ws);
+    add_build_file("game_main.jai", game_ws);
+
+    // Build the asset pipeline tool (different executable, different options)
+    tool_ws := compiler_create_workspace("Asset Tool");
+    tool_opts := get_build_options(tool_ws);
+    tool_opts.output_executable_name = "asset_tool";
+    tool_opts.backend = .X64;  // fast backend, debug only
+    set_build_options(tool_opts, tool_ws);
+    add_build_file("tool_main.jai", tool_ws);
+}
+
+#run build();</div>
+
+			<p>One build script, two executables, different compiler settings for each. No external build system needed.</p>
+		</div>
+
+		<div class="section">
+			<h2>The compiler message loop</h2>
+
+			<p>The most powerful feature of Jai's build system: you can <strong>intercept compiler messages</strong> during compilation and react to them. The compiler tells you when files are loaded, when types are checked, when phases complete — and you can inject code in response.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Compiler message flow</div>
+				<div class="pipeline">
+					<div class="pipe-node">
+						<div class="pn-main" style="color:var(--ct);">compiler_begin_intercept</div>
+						<div class="pn-sub">start listening</div>
+					</div>
+					<div class="pipe-arrow">→</div>
+					<div class="pipe-node">
+						<div class="pn-main" style="color:var(--c3);">compiler_wait_for_message</div>
+						<div class="pn-sub">blocks until message available</div>
+					</div>
+					<div class="pipe-arrow">→</div>
+					<div class="pipe-node">
+						<div class="pn-main" style="color:var(--c2);">inspect / react</div>
+						<div class="pn-sub">check message.kind</div>
+					</div>
+					<div class="pipe-arrow">→</div>
+					<div class="pipe-node">
+						<div class="pn-main" style="color:var(--c1);">add_build_string</div>
+						<div class="pn-sub">inject generated code</div>
+					</div>
+					<div class="pipe-arrow">→</div>
+					<div class="pipe-node">
+						<div class="pn-main" style="color:var(--accent2);">.COMPLETE</div>
+						<div class="pn-sub">break loop</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Message kind</th>
+						<th>When it fires</th>
+						<th>What you can do with it</th>
+					</tr>
+					<tr>
+						<td><code>.FILE</code></td>
+						<td>Each source file is loaded</td>
+						<td>Track which files are in the build, implement custom preprocessing</td>
+					</tr>
+					<tr>
+						<td><code>.IMPORT</code></td>
+						<td>A module is imported (once per unique import)</td>
+						<td>Log dependencies, enforce import policies</td>
+					</tr>
+					<tr>
+						<td><code>.TYPECHECKED</code></td>
+						<td>Declarations pass type-checking</td>
+						<td><strong>Inspect type info, enforce coding rules, generate code based on types</strong></td>
+					</tr>
+					<tr>
+						<td><code>.PHASE</code></td>
+						<td>Compiler advances to a new phase</td>
+						<td>Trigger code generation at the right moment (e.g., after all types are known)</td>
+					</tr>
+					<tr>
+						<td><code>.ERROR</code></td>
+						<td>Compilation error occurs</td>
+						<td>Custom error handling, reporting</td>
+					</tr>
+					<tr>
+						<td><code>.COMPLETE</code></td>
+						<td>Compilation finishes</td>
+						<td>Break the message loop</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Real example: auto-generating main() from notes</h2>
+
+			<p>Jai has <strong>notes</strong> — string tags on functions and structs (similar to Java annotations or C# attributes, but simpler). A metaprogram can find all functions with a given note and generate code that calls them:</p>
+
+			<div class="codeblock">// main.jai — the "user" code
+dog    :: () { print("dog\n");    } @note
+banana :: () { print("banana\n"); } @note
+apple  :: () { print("apple\n");  } @note
+
+// The metaprogram will generate main() automatically.</div>
+
+			<div class="codeblock">// build.jai — the metaprogram
+// 1. Intercept .TYPECHECKED messages
+// 2. Find all functions tagged @note
+// 3. Sort them alphabetically
+// 4. Generate a main() that calls them in order
+
+while true {
+    message := compiler_wait_for_message();
+    if message.kind == .TYPECHECKED {
+        typechecked := cast(*Message_Typechecked) message;
+        for decl: typechecked.declarations {
+            for note: decl.expression.notes {
+                if equal(note.text, "note") {
+                    array_add(*functions, decl.expression.name);
+                }
+            }
+        }
+    }
+    if message.kind == .PHASE {
+        phase := cast(*Message_Phase) message;
+        if phase.phase == .TYPECHECKED_ALL_WE_CAN {
+            // All types known — generate code now
+            sort(functions);
+            code := "main :: () {\n";
+            for f: functions  code = tprint("%  %();\n", code, f);
+            code = tprint("%}\n", code);
+            add_build_string(code, workspace);
+        }
+    }
+    if message.kind == .COMPLETE  break;
+}</div>
+
+			<div class="diagram-caption" style="margin-top:8px;">
+				Output: <code>main</code> calls <code>apple()</code>, <code>banana()</code>, <code>dog()</code> — sorted. The user never wrote <code>main</code>. The metaprogram generated it from the <code>@note</code> tags.
+			</div>
+
+			<p>This pattern scales to much more complex use cases: auto-registering test functions, generating dispatch tables from tagged handlers, building plugin systems where modules self-register at compile time.</p>
+		</div>
+
+		<div class="section">
+			<h2>Enforcing house rules</h2>
+
+			<p>The message loop gives you programmatic access to every declaration in the program <em>after</em> type-checking. You can enforce arbitrary coding standards by inspecting the AST and calling <code>compiler_report</code> to emit custom errors:</p>
+
+			<div class="codeblock">// MISRA rule: no more than 2 levels of pointer indirection
+check_pointer_level :: (decl: *Code_Declaration) {
+    type := decl.type;
+    pointer_level := 0;
+    while type.type == .POINTER {
+        pointer_level += 1;
+        p := cast(*Type_Info_Pointer) type;
+        type = p.pointer_to;
+    }
+    if pointer_level > 2 {
+        loc := make_location(decl);
+        compiler_report("Too many levels of pointer indirection.\n", loc);
+    }
+}</div>
+
+			<div class="callout">
+				<strong>Not a linter — a compiler extension.</strong> This runs <em>inside</em> the compiler, with full type info, and produces errors indistinguishable from built-in compiler errors. It points to the exact line in your source. You can enforce any rule that can be expressed as "inspect a declaration and decide if it's valid."
+			</div>
+		</div>
+	</div>
+
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: ZIG'S COMPTIME                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-zig">
+
+		<div class="section">
+			<h2>Zig's philosophy: same power, deliberate restrictions</h2>
+
+			<p>Zig has compile-time execution too — via the <code>comptime</code> keyword. But where Jai says "do everything, I trust you," Zig says "do everything <em>that's safe and reproducible</em>." The restrictions are intentional design choices, not limitations:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Capability</th>
+						<th>Jai</th>
+						<th>Zig</th>
+					</tr>
+					<tr>
+						<td>Run arbitrary code at compile time</td>
+						<td style="color:var(--c2);">Yes — any function, any code</td>
+						<td style="color:var(--c2);">Yes — any pure function</td>
+					</tr>
+					<tr>
+						<td>Types as first-class values</td>
+						<td style="color:var(--c2);">Yes</td>
+						<td style="color:var(--c2);">Yes — <code>type</code> is a value</td>
+					</tr>
+					<tr>
+						<td>Compile-time reflection</td>
+						<td style="color:var(--c2);">Yes — full type info at compile and runtime</td>
+						<td style="color:var(--c2);">Yes — <code>@typeInfo</code>, <code>@TypeOf</code></td>
+					</tr>
+					<tr>
+						<td>I/O during compilation</td>
+						<td style="color:var(--c2);">Yes — files, network, graphics, anything</td>
+						<td style="color:var(--c0);">No — comptime has no I/O facilities</td>
+					</tr>
+					<tr>
+						<td>Modify the AST</td>
+						<td style="color:var(--c2);">Yes — read/write access to program AST</td>
+						<td style="color:var(--c0);">No — can generate types, not rewrite code</td>
+					</tr>
+					<tr>
+						<td>Code as data (quasiquoting)</td>
+						<td style="color:var(--c2);">Yes — <code>#code</code>, <code>#insert</code></td>
+						<td style="color:var(--c0);">No — no string-to-code insertion</td>
+					</tr>
+					<tr>
+						<td>Compiler message loop</td>
+						<td style="color:var(--c2);">Yes — intercept and react to compiler events</td>
+						<td style="color:var(--c0);">No — build.zig is separate from compilation</td>
+					</tr>
+					<tr>
+						<td>Cross-compilation safety</td>
+						<td style="color:var(--c1);">Not a design goal</td>
+						<td style="color:var(--c2);">Enforced — comptime can't leak host details</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>What Zig comptime looks like</h2>
+
+			<p>The core mechanic: tag a function parameter or variable as <code>comptime</code>, and the compiler evaluates it during compilation. Types can be returned from functions, type info can be destructured in <code>switch</code> statements, and generic code falls out naturally:</p>
+
+			<div class="codeblock">// Zig: generic max function — types are compile-time values
+fn max(comptime T: type, a: T, b: T) T {
+    return if (a > b) a else b;
+}
+
+// Usage — T is inferred at compile time:
+const result = max(f32, 3.14, 2.71);  // compiles to: return 3.14</div>
+
+			<div class="codeblock">// Zig: compile-time type construction
+fn Matrix(comptime T: type, comptime W: comptime_int, comptime H: comptime_int) type {
+    return [H][W]T;
+}
+
+// Matrix(f32, 4, 4) evaluates to [4][4]f32 at compile time</div>
+
+			<div class="codeblock">// Zig: compile-time reflection via @typeInfo
+fn addSmallInts(comptime T: type, a: T, b: T) T {
+    return switch (@typeInfo(T)) {
+        .int => |info| if (info.bits <= 16) a + b
+                        else @compileError("ints too large"),
+        else => @compileError("only ints accepted"),
+    };
+}</div>
+		</div>
+
+		<div class="section">
+			<h2>The deliberate restrictions</h2>
+
+			<p>Zig's comptime restrictions aren't bugs — they're load-bearing design decisions:</p>
+
+			<div class="compare-grid">
+				<div class="compare-card">
+					<h3 style="color:var(--c2);">No I/O</h3>
+					<p>Comptime code can't read files, talk to databases, or make network requests. This means compilation is <strong>hermetic and reproducible</strong>: the same source code always produces the same binary, regardless of what's on disk or what server is running.</p>
+					<p style="font-size:12px; color:var(--text-dim); margin-top:6px;">If you need I/O at build time, Zig's <code>build.zig</code> (a general-purpose build system) can run a separate Zig program to generate code, which is then <code>@import</code>-ed.</p>
+				</div>
+				<div class="compare-card">
+					<h3 style="color:var(--c3);">No host leakage</h3>
+					<p>Comptime code can't observe properties of the machine it's compiling on. This matters for cross-compilation: if your Linux build machine is compiling for ARM, comptime can't accidentally bake in x86 assumptions.</p>
+					<p style="font-size:12px; color:var(--text-dim); margin-top:6px;">Jai doesn't enforce this boundary. Its <code>#run</code> can do anything the host machine supports, which is powerful but makes cross-compilation harder to reason about.</p>
+				</div>
+			</div>
+
+			<div class="callout">
+				<strong>The philosophical split:</strong> Zig's position is that the restrictions buy you cacheability (the compiler can skip re-evaluating comptime blocks if inputs haven't changed), reproducibility, and safety. Jai's position is that the programmer should have the full power and accept the responsibility. Both are coherent positions — they just optimize for different things.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>What Zig can't do that Jai can</h2>
+
+			<p>The practical difference comes down to three things Jai has that Zig deliberately doesn't:</p>
+
+			<p><strong>1. String-to-code insertion.</strong> Jai's <code>#insert</code> takes a string and compiles it as code. This is the most flexible form of code generation — any string manipulation technique produces code. Zig has no equivalent. To generate code in Zig, you either return a type from a comptime function (type-level metaprogramming only) or use the build system to generate a <code>.zig</code> file and import it.</p>
+
+			<p><strong>2. Compiler as API.</strong> Jai's compiler message loop lets the metaprogram intercept every declaration, inspect its AST, and inject code in response. Zig has no compiler API accessible from user code — the build system and the compiler are separate concerns.</p>
+
+			<p><strong>3. Unrestricted side effects.</strong> A Jai <code>#run</code> can open files, make network requests, render graphics, play sound — Blow's demo of running a game during compilation is the canonical example. Zig's comptime is pure computation with no side effects.</p>
+		</div>
+
+	</div>
+
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: TRADEOFFS                                  -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-tradeoffs">
+
+		<div class="section">
+			<h2>What you gain</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">Problems eliminated by compile-time execution</div>
+				<div style="display:grid; grid-template-columns: auto 1fr; gap: 2px 16px; font-family:var(--mono); font-size:12px; line-height:2.2;">
+					<span style="color:var(--c2); font-weight:600;">No shadow compilers</span>
+					<span>No protoc, no MOC, no UHT. Code generation happens in the same language, in the same build step, with the same debugger.</span>
+
+					<span style="color:var(--c2); font-weight:600;">No build system language</span>
+					<span>No CMake, no Make, no Ninja. Build configuration is code in the language you already know.</span>
+
+					<span style="color:var(--c2); font-weight:600;">No reflection gap</span>
+					<span>Type information is available at compile time (for code generation) and at runtime (for debugging, serialization). No macros, no RTTI hacks.</span>
+
+					<span style="color:var(--c2); font-weight:600;">Zero-cost abstractions</span>
+					<span>Compile-time evaluated code produces the same output as hand-written specialized code. No vtables, no function pointers, no runtime dispatch for things known at compile time.</span>
+
+					<span style="color:var(--c2); font-weight:600;">One mental model</span>
+					<span>The same syntax, the same semantics, the same debugging tools whether code runs at compile time or runtime. No template-metaprogramming-brain-mode required.</span>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>What you pay</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">The costs and risks</div>
+				<div style="display:grid; grid-template-columns: auto 1fr; gap: 2px 16px; font-family:var(--mono); font-size:12px; line-height:2.2;">
+					<span style="color:var(--c0); font-weight:600;">Compile time cost</span>
+					<span>Running code during compilation takes time. Heavy metaprograms push compilation from "instant" to "noticeable." Jai mitigates this with fast compile times overall (80k lines in ~1 second), but the cost isn't zero.</span>
+
+					<span style="color:var(--c0); font-weight:600;">Debugging generated code</span>
+					<span>When <code>#insert</code> splices a string into the program, the resulting code doesn't exist in any source file you wrote. Breakpoints, stack traces, and error messages reference generated code. Jai dumps generated strings to <code>.build/.added_strings_w2.jai</code> for inspection, but it's still indirection.</span>
+
+					<span style="color:var(--c0); font-weight:600;">Readability of metaprograms</span>
+					<span>A program that generates programs is inherently harder to read than a program that just runs. You have to simulate the metaprogram in your head to understand what code it produces. This is true of all code generation, but making it easy and integrated means people use it more — including in places where a simpler solution would suffice.</span>
+
+					<span style="color:var(--c0); font-weight:600;">Tooling difficulty</span>
+					<span>IDEs, linters, and refactoring tools need to understand not just the code you wrote but the code your metaprogram generates. An identifier might not exist in source — it's <code>#placeholder</code>'d and generated by a message loop. This makes static analysis substantially harder.</span>
+
+					<span style="color:var(--c0); font-weight:600;">Reproducibility (Jai-specific)</span>
+					<span>If <code>#run</code> can read files, query databases, or depend on host environment, the same source code can produce different binaries depending on where/when it's compiled. Zig avoids this by design; Jai leaves it to programmer discipline.</span>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The Handmade Network perspective</h2>
+
+			<p>An important counterpoint from the Handmade community: <strong>you don't always need metaprogramming, even when it's available.</strong> The Handmade fishbowl discussion on this topic surfaced a useful heuristic from Ryan Fleury: the less you use metaprogramming, the better the solution tends to be.</p>
+
+			<p>The categories of "metaprogramming" worth distinguishing:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Category</th>
+						<th>Example</th>
+						<th>Necessity</th>
+					</tr>
+					<tr>
+						<td>Runtime type info</td>
+						<td>Serialization, editor UI</td>
+						<td style="color:var(--c2);">High — you genuinely need type knowledge at runtime</td>
+					</tr>
+					<tr>
+						<td>Parametric polymorphism</td>
+						<td>Generic containers, <code>Array(T)</code></td>
+						<td style="color:var(--c2);">High — solves real code duplication</td>
+					</tr>
+					<tr>
+						<td>Compile-time execution</td>
+						<td>Lookup tables, constant computation</td>
+						<td style="color:var(--c1);">Medium — useful but often achievable other ways</td>
+					</tr>
+					<tr>
+						<td>Code introspection</td>
+						<td>Custom lint rules, enforcing conventions</td>
+						<td style="color:var(--c1);">Medium — valuable in large teams</td>
+					</tr>
+					<tr>
+						<td>AST manipulation / code generation</td>
+						<td>Auto-generating dispatchers, ORM layers</td>
+						<td style="color:var(--warn);">Use with caution — powerful but hard to debug</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>The risk is that compile-time execution becomes a hammer for every nail. A loop that iterates over struct fields at compile time and generates specialized code is elegant — but a hand-written function that does the same thing at runtime with a table might be simpler to read, debug, and maintain.</p>
+		</div>
+
+		<div class="section">
+			<h2>Where things stand (2026)</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Language</th>
+						<th>Status</th>
+						<th>Compile-time model</th>
+					</tr>
+					<tr>
+						<td>Jai</td>
+						<td>Closed beta; engine going open-source after Order of the Sinking Star ships</td>
+						<td>Most powerful: <code>#run</code> + <code>#insert</code> + compiler message loop + full AST access. Unrestricted.</td>
+					</tr>
+					<tr>
+						<td>Zig</td>
+						<td>Public, active development</td>
+						<td>Powerful but restricted: <code>comptime</code> with no I/O, no AST manipulation, no string insertion. Hermetic by design.</td>
+					</tr>
+					<tr>
+						<td>Odin</td>
+						<td>Public, stable</td>
+						<td>Lighter touch: built-in SOA/AOS, parametric polymorphism, some introspection. Minimal metaprogramming by design.</td>
+					</tr>
+					<tr>
+						<td>C++</td>
+						<td>constexpr/consteval expanding each standard</td>
+						<td>Whitelisted: each C++ version allows slightly more in constexpr. Still no code generation, no type iteration, no string insertion.</td>
+					</tr>
+					<tr>
+						<td>Rust</td>
+						<td>Stable, proc macros available</td>
+						<td>Procedural macros: separate crate that receives and emits token streams. Powerful but complex, separate compilation model.</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				<strong>The convergence:</strong> Every modern systems language is moving toward more compile-time capability. The debate isn't whether compile-time execution is useful — it's how much power to give the programmer and how many guardrails to enforce. Jai sits at the maximum-power end; Zig at the maximum-safety end; everyone else is somewhere in between.
+			</div>
+		</div>
+
+	</div>
+
+</div>
+
+<script>
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
