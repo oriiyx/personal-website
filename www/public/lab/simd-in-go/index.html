@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>SIMD in Go — From First Principles</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+          --c0: #f06565;
+          --c1: #e8b834;
+          --c2: #4dc462;
+          --c3: #3d9be8;
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+          /* SIMD-specific palette */
+          --lane0: #f06565;
+          --lane1: #e8b834;
+          --lane2: #4dc462;
+          --lane3: #3d9be8;
+          --scalar: #8b8fa3;
+          --simd: #c084fc;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      .page {
+          max-width: 1080px;
+          margin: 0 auto;
+          padding: 48px 24px 100px;
+      }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      /* Tabs */
+      .tab-bar {
+          display: flex;
+          gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          justify-content: center;
+      }
+
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+
+      .tab-btn:hover { color: var(--text); background: var(--surface2); }
+      .tab-btn.active { color: #fff; background: var(--accent); }
+
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; animation: fadeIn 0.2s ease; }
+
+      @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Prose */
+      .section { margin-bottom: 40px; }
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+      .section p { margin-bottom: 14px; }
+      .section p:last-child { margin-bottom: 0; }
+      strong { color: var(--text-b); font-weight: 600; }
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      /* Diagrams */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* Register / lane visualisation */
+      .reg-row {
+          display: flex;
+          align-items: center;
+          margin-bottom: 6px;
+      }
+      .reg-lbl {
+          width: 120px;
+          flex-shrink: 0;
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          text-align: right;
+          padding-right: 14px;
+      }
+      .lanes {
+          display: flex;
+          gap: 4px;
+      }
+      .lane {
+          min-width: 68px;
+          height: 38px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: var(--mono);
+          font-size: 13px;
+          font-weight: 600;
+          border-radius: 4px;
+          flex-shrink: 0;
+      }
+      .lane.l0 { background: rgba(240,101,101,0.09); color: var(--lane0); }
+      .lane.l1 { background: rgba(232,184,52,0.09); color: var(--lane1); }
+      .lane.l2 { background: rgba(77,196,98,0.09); color: var(--lane2); }
+      .lane.l3 { background: rgba(61,155,232,0.09); color: var(--lane3); }
+      .lane.dim { background: rgba(80,80,100,0.05); color: var(--text-xdim); }
+      .lane.accent { background: rgba(124,92,224,0.08); color: var(--accent2); }
+
+      .op-row {
+          display: flex;
+          align-items: center;
+          margin: 4px 0;
+      }
+      .op-lbl {
+          width: 120px;
+          flex-shrink: 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--accent);
+          text-align: right;
+          padding-right: 14px;
+      }
+
+      /* Codeblock */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+          white-space: pre;
+      }
+
+      /* Callout */
+      .callout {
+          background: rgba(124,92,224,0.06);
+          border: 1px solid rgba(124,92,224,0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+      .callout.warn {
+          background: rgba(232,136,58,0.06);
+          border-color: rgba(232,136,58,0.14);
+      }
+
+      /* Table */
+      .tbl-wrap { overflow-x: auto; margin: 16px 0; }
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+      }
+      tr:last-child td { border-bottom: none; }
+
+      /* Pipeline flow */
+      .pipeline {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+          font-family: var(--mono);
+          font-size: 12px;
+          padding: 8px 0;
+      }
+      .pipeline .stage {
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 8px 14px;
+          text-align: center;
+      }
+      .pipeline .arrow { color: var(--text-xdim); font-size: 16px; }
+
+      .cr { color: var(--c0); }
+      .cg { color: var(--c2); }
+      .cb { color: var(--c3); }
+      .cy { color: var(--c1); }
+      .cp { color: var(--accent2); }
+
+      .scroll-hint { min-width: 580px; }
+
+      /* Comparison columns */
+      .compare-cols {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+          margin: 16px 0;
+      }
+      .compare-col {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+      }
+      .compare-col h3 {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 12px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+      .compare-col .col-code {
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          white-space: pre;
+          color: var(--text);
+      }
+
+      /* Cycle timeline */
+      .cycle-grid {
+          display: grid;
+          gap: 2px;
+          margin: 12px 0;
+      }
+      .cycle-row {
+          display: flex;
+          align-items: center;
+      }
+      .cycle-lbl {
+          width: 80px;
+          flex-shrink: 0;
+          font-family: var(--mono);
+          font-size: 10px;
+          color: var(--text-dim);
+          text-align: right;
+          padding-right: 10px;
+      }
+      .cycle-cells {
+          display: flex;
+          gap: 2px;
+      }
+      .cycle-cell {
+          width: 42px;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: var(--mono);
+          font-size: 9px;
+          font-weight: 600;
+          border-radius: 3px;
+      }
+
+      @media (max-width: 640px) {
+          .tab-btn { font-size: 10px; padding: 7px 10px; }
+          .reg-lbl, .op-lbl { width: 80px; font-size: 9px; }
+          .lane { min-width: 50px; height: 30px; font-size: 11px; }
+          .compare-cols { grid-template-columns: 1fr; }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<a class="back-link" href="/lab/"
+		 style="font-family:var(--mono);font-size:11px;color:var(--text-dim);text-decoration:none;display:inline-block;margin-bottom:24px;letter-spacing:0.3px;">←
+		back to lab</a>
+
+	<div class="page-header">
+		<h1>SIMD in Go from first principles</h1>
+		<div class="sub">Go 1.26 · simd/archsimd · GOEXPERIMENT=simd · AMD64 intrinsics for the rest of us</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="problem">The Problem</button>
+		<button class="tab-btn" data-tab="hardware">The Hardware</button>
+		<button class="tab-btn" data-tab="scalar-vs-simd">Scalar vs SIMD</button>
+		<button class="tab-btn" data-tab="api">The Go API</button>
+		<button class="tab-btn" data-tab="example">Worked Example</button>
+		<button class="tab-btn" data-tab="practical">Practical Notes</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE PROBLEM                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-problem">
+
+		<div class="section">
+			<h2>Why does SIMD exist?</h2>
+
+			<p>CPUs are fast, but they're designed around <strong>scalar</strong> execution: one instruction operates on one value. If you need to add 1024 floats together pairwise, the CPU issues 1024 ADD instructions, each one waiting for the previous to retire through the pipeline.</p>
+
+			<p>But most of those additions are <strong>independent</strong>. The result of adding <code>a[0] + b[0]</code> has nothing to do with <code>a[1] + b[1]</code>. They could happen simultaneously if the hardware supported it.</p>
+
+			<p><strong>SIMD — Single Instruction, Multiple Data — is exactly this.</strong> Instead of one ADD that operates on one pair of values, a single SIMD instruction operates on 4, 8, 16, or even 64 pairs at once. Same instruction, same latency, multiple results. The tradeoff: you need your data laid out contiguously in memory and your operations to be uniform across all lanes.</p>
+		</div>
+
+		<div class="section">
+			<h2>Where does it matter?</h2>
+
+			<p>SIMD shines on <strong>data-parallel</strong> workloads — operations where you apply the same transformation to every element of a large array. Image processing, audio DSP, physics simulations, matrix math, cryptography, text search (finding bytes in a buffer), and vector similarity search all fit this pattern.</p>
+
+			<p>It doesn't help with serial/branchy code: tree traversal, graph algorithms, or business logic with complex conditionals. If every element needs different treatment, you can't pack them into one instruction.</p>
+		</div>
+
+		<div class="section">
+			<h2>Why does Go need this now?</h2>
+
+			<p>Before Go 1.26, your options for SIMD in Go were painful: write raw Go assembly by hand (using Go's idiosyncratic assembler syntax), or call C via cgo (paying ~100ns per call in overhead). Both approaches break the Go development model — no type safety, no compiler optimizations across the boundary, no debugger support.</p>
+
+			<p>Go 1.26 introduces <code>simd/archsimd</code> under <code>GOEXPERIMENT=simd</code>: a package of <strong>compiler intrinsics</strong> that look like normal Go method calls but compile directly to single SIMD instructions. The compiler sees through them — it can inline, register-allocate, and fuse loads with arithmetic, just like it does with regular Go code.</p>
+
+			<div class="callout">
+				<strong>Experimental status.</strong> This is behind a build flag (<code>GOEXPERIMENT=simd</code>), AMD64 only, and not covered by the Go 1 compatibility promise. The API may change in Go 1.27. A portable high-level API is planned but not yet available — <code>archsimd</code> is the low-level foundation it will build on.
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE HARDWARE                               -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-hardware">
+
+		<div class="section">
+			<h2>Vector registers</h2>
+
+			<p>A normal CPU register (like <code>RAX</code> on x86-64) holds one 64-bit value. SIMD introduces <strong>wider registers</strong> that hold multiple values packed side by side. On AMD64, these come in three sizes:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Register</th>
+						<th>Width</th>
+						<th>ISA Extension</th>
+						<th>Float32 lanes</th>
+						<th>Int8 lanes</th>
+					</tr>
+					<tr>
+						<td><code>XMM0–XMM15</code></td>
+						<td>128 bits</td>
+						<td>SSE2+</td>
+						<td>4</td>
+						<td>16</td>
+					</tr>
+					<tr>
+						<td><code>YMM0–YMM15</code></td>
+						<td>256 bits</td>
+						<td>AVX2</td>
+						<td>8</td>
+						<td>32</td>
+					</tr>
+					<tr>
+						<td><code>ZMM0–ZMM31</code></td>
+						<td>512 bits</td>
+						<td>AVX-512</td>
+						<td>16</td>
+						<td>64</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>The key insight: a 256-bit YMM register can hold <strong>eight</strong> 32-bit floats. One <code>VADDPS</code> instruction adds all eight pairs simultaneously — not "eight times faster" (there's overhead), but close to it for large arrays.</p>
+		</div>
+
+		<div class="section">
+			<h2>How a SIMD add works in hardware</h2>
+
+			<p>Consider adding two arrays of four <code>float32</code> values using 128-bit SSE. The CPU loads 4 floats from each array into two XMM registers, then a single <code>ADDPS</code> instruction fires all four adders in parallel:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">128-bit SIMD add — four float32 lanes</div>
+
+				<div class="scroll-hint">
+					<div class="reg-row">
+						<div class="reg-lbl">XMM0</div>
+						<div class="lanes">
+							<div class="lane l0">1.0</div>
+							<div class="lane l1">2.0</div>
+							<div class="lane l2">3.0</div>
+							<div class="lane l3">4.0</div>
+						</div>
+					</div>
+					<div class="op-row">
+						<div class="op-lbl">ADDPS</div>
+						<div style="font-family:var(--mono);font-size:11px;color:var(--text-xdim);">+ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; + &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; + &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; +</div>
+					</div>
+					<div class="reg-row">
+						<div class="reg-lbl">XMM1</div>
+						<div class="lanes">
+							<div class="lane l0">5.0</div>
+							<div class="lane l1">6.0</div>
+							<div class="lane l2">7.0</div>
+							<div class="lane l3">8.0</div>
+						</div>
+					</div>
+					<div class="op-row">
+						<div class="op-lbl">= result</div>
+						<div style="font-family:var(--mono);font-size:11px;color:var(--text-xdim);">────────────────────────────────────────────────────</div>
+					</div>
+					<div class="reg-row">
+						<div class="reg-lbl">XMM0</div>
+						<div class="lanes">
+							<div class="lane accent">6.0</div>
+							<div class="lane accent">8.0</div>
+							<div class="lane accent">10.0</div>
+							<div class="lane accent">12.0</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					Each vertical column is a <strong>lane</strong>. Lanes are independent — lane 0 knows nothing about lane 1.
+					The instruction issues once and retires once, but four additions happen in that single cycle window.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The execution timeline</h2>
+
+			<p>Here's the critical comparison. Adding 8 floats pairwise, scalar vs. 256-bit SIMD:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">Scalar: 8 separate ADD instructions</div>
+				<div class="cycle-grid">
+					<div class="cycle-row">
+						<div class="cycle-lbl">cycle</div>
+						<div class="cycle-cells">
+							<div class="cycle-cell" style="background:rgba(240,101,101,0.12);color:var(--c0);">1</div>
+							<div class="cycle-cell" style="background:rgba(232,184,52,0.12);color:var(--c1);">2</div>
+							<div class="cycle-cell" style="background:rgba(77,196,98,0.12);color:var(--c2);">3</div>
+							<div class="cycle-cell" style="background:rgba(61,155,232,0.12);color:var(--c3);">4</div>
+							<div class="cycle-cell" style="background:rgba(240,101,101,0.12);color:var(--c0);">5</div>
+							<div class="cycle-cell" style="background:rgba(232,184,52,0.12);color:var(--c1);">6</div>
+							<div class="cycle-cell" style="background:rgba(77,196,98,0.12);color:var(--c2);">7</div>
+							<div class="cycle-cell" style="background:rgba(61,155,232,0.12);color:var(--c3);">8</div>
+						</div>
+					</div>
+					<div class="cycle-row">
+						<div class="cycle-lbl">work</div>
+						<div class="cycle-cells">
+							<div class="cycle-cell" style="background:var(--surface2);color:var(--text-dim);">a+b</div>
+							<div class="cycle-cell" style="background:var(--surface2);color:var(--text-dim);">a+b</div>
+							<div class="cycle-cell" style="background:var(--surface2);color:var(--text-dim);">a+b</div>
+							<div class="cycle-cell" style="background:var(--surface2);color:var(--text-dim);">a+b</div>
+							<div class="cycle-cell" style="background:var(--surface2);color:var(--text-dim);">a+b</div>
+							<div class="cycle-cell" style="background:var(--surface2);color:var(--text-dim);">a+b</div>
+							<div class="cycle-cell" style="background:var(--surface2);color:var(--text-dim);">a+b</div>
+							<div class="cycle-cell" style="background:var(--surface2);color:var(--text-dim);">a+b</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">SIMD (256-bit AVX2): 1 VADDPS instruction</div>
+				<div class="cycle-grid">
+					<div class="cycle-row">
+						<div class="cycle-lbl">cycle</div>
+						<div class="cycle-cells">
+							<div class="cycle-cell" style="background:rgba(124,92,224,0.15);color:var(--accent2);min-width:348px;">1</div>
+						</div>
+					</div>
+					<div class="cycle-row">
+						<div class="cycle-lbl">work</div>
+						<div class="cycle-cells">
+							<div class="cycle-cell" style="background:var(--surface2);color:var(--accent2);min-width:348px;">8× (a+b) simultaneously</div>
+						</div>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					The scalar version issues 8 independent instructions. The SIMD version does the same work in 1.
+					Real throughput depends on load/store overhead, but for compute-bound loops the speedup is close to the lane count.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>ISA feature tiers on AMD64</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Feature</th>
+						<th>Vector width</th>
+						<th>Introduced</th>
+						<th>Go archsimd types</th>
+					</tr>
+					<tr>
+						<td>SSE2</td>
+						<td>128-bit</td>
+						<td>Pentium 4 (2001)</td>
+						<td><code>Float32x4</code>, <code>Int8x16</code>, etc.</td>
+					</tr>
+					<tr>
+						<td>AVX2</td>
+						<td>256-bit</td>
+						<td>Haswell (2013)</td>
+						<td><code>Float32x8</code>, <code>Int64x4</code>, etc.</td>
+					</tr>
+					<tr>
+						<td>AVX-512</td>
+						<td>512-bit</td>
+						<td>Skylake-X (2017)</td>
+						<td><code>Float32x16</code>, <code>Int8x64</code>, etc.</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>SSE2 is baseline on all x86-64 processors — it's always available. AVX2 is nearly universal on server/desktop hardware from the last decade. AVX-512 is common on server chips but absent from many consumer CPUs (notably most AMD Zen 1–3 and Intel Alder Lake E-cores).</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: SCALAR VS SIMD                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-scalar-vs-simd">
+
+		<div class="section">
+			<h2>The same operation, two ways</h2>
+
+			<p>Let's add two slices of <code>float32</code> element-wise: <code>result[i] = a[i] + b[i]</code>. This is the canonical SIMD example because every element is independent.</p>
+
+			<div class="compare-cols">
+				<div class="compare-col">
+					<h3 style="color:var(--scalar);">Scalar</h3>
+					<div class="col-code">func AddScalar(a, b, dst []float32) {
+    for i := range a {
+        dst[i] = a[i] + b[i]
+    }
+}</div>
+				</div>
+				<div class="compare-col">
+					<h3 style="color:var(--simd);">SIMD (archsimd, AVX2)</h3>
+					<div class="col-code">func AddSIMD(a, b, dst []float32) {
+    n := len(a)
+    i := 0
+    for ; i+8 <= n; i += 8 {
+        va := archsimd.LoadFloat32x8Slice(a[i:])
+        vb := archsimd.LoadFloat32x8Slice(b[i:])
+        va.Add(vb).StoreSlice(dst[i:])
+    }
+    for ; i < n; i++ {
+        dst[i] = a[i] + b[i]
+    }
+}</div>
+				</div>
+			</div>
+
+			<p>The scalar version compiles to a loop that loads one float, adds it, stores the result, and increments. The SIMD version loads <strong>8 floats at once</strong> into a YMM register, adds all 8 in parallel with a single <code>VADDPS</code>, and stores all 8 results back. The scalar tail loop handles any remaining elements that don't fill a full 8-wide vector.</p>
+		</div>
+
+		<div class="section">
+			<h2>What the compiler generates</h2>
+
+			<p>Each <code>archsimd</code> method call compiles to exactly one machine instruction. The SIMD loop body becomes roughly:</p>
+
+			<div class="codeblock">VMOVUPS   (AX), Y0          // LoadFloat32x8Slice(a[i:])
+VMOVUPS   (BX), Y1          // LoadFloat32x8Slice(b[i:])
+VADDPS    Y1, Y0, Y0        // va.Add(vb)
+VMOVUPS   Y0, (CX)          // .StoreSlice(dst[i:])
+ADDQ      $32, AX           // i += 8 (8 × 4 bytes)
+ADDQ      $32, BX
+ADDQ      $32, CX</div>
+
+			<p>That's <strong>3 data instructions + 3 pointer bumps</strong> to process 8 floats. The scalar loop needs <strong>8× the data instructions</strong> for the same 8 floats. The compiler can also fuse the load and add into a memory-operand form (<code>VADDPS (BX), Y0, Y0</code>), eliminating one instruction entirely.</p>
+		</div>
+
+		<div class="section">
+			<h2>Performance comparison</h2>
+
+			<p>From benchmarks on an AMD EPYC 9575F (Go 1.26, <code>GOEXPERIMENT=simd</code>), adding two <code>float32</code> slices:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Size</th>
+						<th>Scalar throughput</th>
+						<th>SIMD throughput</th>
+						<th>Speedup</th>
+					</tr>
+					<tr>
+						<td>1K elements</td>
+						<td>~14 GB/s</td>
+						<td>~366 GB/s</td>
+						<td>~26×</td>
+					</tr>
+					<tr>
+						<td>65K elements</td>
+						<td>~15 GB/s</td>
+						<td>~246 GB/s</td>
+						<td>~16×</td>
+					</tr>
+					<tr>
+						<td>1M elements</td>
+						<td>~12 GB/s</td>
+						<td>~127 GB/s</td>
+						<td>~10×</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>The speedup decreases at larger sizes because the bottleneck shifts from compute to <strong>memory bandwidth</strong>. At 1K elements, everything fits in L1 cache and the ALU is the constraint. At 1M, the data streams from L3 or main memory, and the SIMD ALU spends most of its time waiting for loads.</p>
+
+			<div class="callout">
+				<strong>This is the fundamental SIMD insight:</strong> SIMD helps when you're compute-bound (the CPU can do more work per cycle than memory can deliver). Once you're memory-bound, wider vectors don't help — you need faster RAM or better cache utilization. This is why SIMD + data-oriented design (contiguous arrays, struct-of-arrays layout) work together.
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE GO API                                 -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-api">
+
+		<div class="section">
+			<h2>Type naming convention</h2>
+
+			<p>Every <code>archsimd</code> type encodes its shape in the name: <code>{ElementType}x{LaneCount}</code>. The total register width is <code>element_bits × lane_count</code>.</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Type</th>
+						<th>Element</th>
+						<th>Lanes</th>
+						<th>Register</th>
+						<th>Total bits</th>
+					</tr>
+					<tr>
+						<td><code>Float32x4</code></td>
+						<td>float32 (32b)</td>
+						<td>4</td>
+						<td>XMM (128b)</td>
+						<td>128</td>
+					</tr>
+					<tr>
+						<td><code>Float32x8</code></td>
+						<td>float32 (32b)</td>
+						<td>8</td>
+						<td>YMM (256b)</td>
+						<td>256</td>
+					</tr>
+					<tr>
+						<td><code>Int64x4</code></td>
+						<td>int64 (64b)</td>
+						<td>4</td>
+						<td>YMM (256b)</td>
+						<td>256</td>
+					</tr>
+					<tr>
+						<td><code>Uint8x64</code></td>
+						<td>uint8 (8b)</td>
+						<td>64</td>
+						<td>ZMM (512b)</td>
+						<td>512</td>
+					</tr>
+					<tr>
+						<td><code>Float64x8</code></td>
+						<td>float64 (64b)</td>
+						<td>8</td>
+						<td>ZMM (512b)</td>
+						<td>512</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>These are Go structs, but they're special: the compiler maps them directly to hardware vector registers. You use them as values (not pointers) — the compiler keeps them in registers as long as possible.</p>
+		</div>
+
+		<div class="section">
+			<h2>The core operations</h2>
+
+			<p>The API follows a consistent pattern. Data flows in four phases:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">SIMD operation lifecycle</div>
+				<div class="pipeline">
+					<div class="stage" style="color:var(--c0);">Load<br><span style="font-size:10px;color:var(--text-dim);">memory → register</span></div>
+					<div class="arrow">→</div>
+					<div class="stage" style="color:var(--accent2);">Compute<br><span style="font-size:10px;color:var(--text-dim);">register → register</span></div>
+					<div class="arrow">→</div>
+					<div class="stage" style="color:var(--c2);">Store<br><span style="font-size:10px;color:var(--text-dim);">register → memory</span></div>
+				</div>
+				<div class="diagram-caption">
+					Optional fourth phase: <strong>reduce</strong> — collapse a vector to a scalar (horizontal sum, min, max).
+					There is no single-instruction horizontal reduction on x86; you build it from shuffles and adds.
+				</div>
+			</div>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Phase</th>
+						<th>Functions / Methods</th>
+						<th>What they do</th>
+					</tr>
+					<tr>
+						<td>Load</td>
+						<td><code>LoadFloat32x8Slice(s)</code><br><code>LoadFloat32x8(ptr)</code><br><code>BroadcastFloat32x8(x)</code></td>
+						<td>Load 8 contiguous floats from a slice or pointer. Broadcast fills all lanes with the same scalar value.</td>
+					</tr>
+					<tr>
+						<td>Compute</td>
+						<td><code>.Add(y)</code>, <code>.Mul(y)</code>, <code>.Sub(y)</code><br><code>.MulAdd(y, z)</code> (FMA)<br><code>.Min(y)</code>, <code>.Max(y)</code><br><code>.And(y)</code>, <code>.Or(y)</code>, <code>.Xor(y)</code></td>
+						<td>Lane-wise arithmetic, comparisons, bitwise ops. Each compiles to a single instruction. FMA is multiply-add in one step (higher precision, fewer round-trips).</td>
+					</tr>
+					<tr>
+						<td>Store</td>
+						<td><code>.StoreSlice(s)</code><br><code>.Store(ptr)</code></td>
+						<td>Write all lanes back to memory.</td>
+					</tr>
+					<tr>
+						<td>Extract</td>
+						<td><code>.GetElem(i)</code><br><code>.GetHi()</code>, <code>.GetLo()</code></td>
+						<td>Pull a single scalar out, or split a 256-bit vector into two 128-bit halves for horizontal reduction.</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Mask types</h2>
+
+			<p>Comparisons like <code>.Greater(y)</code> don't return <code>bool</code> — they return a <strong>mask</strong> type (e.g. <code>Mask32x8</code>), which is a per-lane true/false. Masks are used for conditional operations without branching:</p>
+
+			<div class="codeblock">mask := va.Greater(vb)          // which lanes of a > b?
+result := va.Merge(vb, mask)    // pick from a where true, b where false</div>
+
+			<p>This is how SIMD handles conditionals: instead of branching (which would break the pipeline), you compute <strong>both paths</strong> and blend the results using a mask. It's more work per element but avoids branch mispredictions entirely.</p>
+		</div>
+
+		<div class="section">
+			<h2>CPU feature detection</h2>
+
+			<p>Not all machines support AVX2 or AVX-512. The package provides runtime checks via the <code>archsimd.X86</code> variable:</p>
+
+			<div class="codeblock">if archsimd.X86.HasAVX2() {
+    // safe to use Float32x8, Int64x4, etc.
+}
+if archsimd.X86.HasAVX512F() {
+    // safe to use Float32x16, Int8x64, etc.
+}</div>
+
+			<p>The compiler treats these as pure functions — they're evaluated once at startup and the check itself is essentially free. Guard your SIMD code paths with these checks and provide a scalar fallback.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: WORKED EXAMPLE                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-example">
+
+		<div class="section">
+			<h2>Worked example: summing an int64 slice</h2>
+
+			<p>A realistic example from the <code>archsimd</code> community: summing all elements of an <code>[]int64</code> using 256-bit (AVX2) vectors. This demonstrates the full pattern — vectorized main loop, horizontal reduction, scalar tail.</p>
+		</div>
+
+		<div class="section">
+			<h2>The scalar baseline</h2>
+
+			<div class="codeblock">func SumScalar(input []int64) int64 {
+    var sum int64
+    for _, v := range input {
+        sum += v
+    }
+    return sum
+}</div>
+
+			<p>One accumulator, one addition per element, fully serial. The compiler may unroll this but cannot vectorize it automatically.</p>
+		</div>
+
+		<div class="section">
+			<h2>The SIMD version</h2>
+
+			<div class="codeblock">func SumSIMD(input []int64) int64 {
+    i := 0
+    n := len(input)
+    var sum int64
+
+    if n >= 8 {
+        // Load first 4 elements into accumulator
+        y0 := archsimd.LoadInt64x4Slice(input[0:4])
+
+        // Main vectorized loop: add 4 elements per iteration
+        loopEnd := n - n%4
+        for i = 4; i < loopEnd; i += 4 {
+            y1 := archsimd.LoadInt64x4Slice(input[i : i+4])
+            y0 = y0.Add(y1)
+        }
+
+        // Horizontal reduction: 4 lanes → 1 scalar
+        x0 := y0.GetLo()            // lower 2 lanes (128-bit)
+        x1 := y0.GetHi()            // upper 2 lanes (128-bit)
+        x0 = x0.Add(x1)             // [lane0+lane2, lane1+lane3]
+        sum = x0.GetElem(0) + x0.GetElem(1)
+    }
+
+    // Scalar tail for remaining elements
+    for ; i < n; i++ {
+        sum += input[i]
+    }
+    return sum
+}</div>
+		</div>
+
+		<div class="section">
+			<h2>Step-by-step: what happens with input [1, 2, 3, 4, 5, 6, 7, 8, 9]</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 1 — Load first 4 into accumulator y0</div>
+				<div class="reg-row">
+					<div class="reg-lbl">y0 (YMM)</div>
+					<div class="lanes">
+						<div class="lane l0">1</div>
+						<div class="lane l1">2</div>
+						<div class="lane l2">3</div>
+						<div class="lane l3">4</div>
+					</div>
+				</div>
+				<div class="diagram-caption"><code>LoadInt64x4Slice(input[0:4])</code> — loads 4 × int64 = 256 bits into a YMM register.</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 2 — Loop iteration: load [5,6,7,8], add to y0</div>
+				<div class="scroll-hint">
+					<div class="reg-row">
+						<div class="reg-lbl">y0</div>
+						<div class="lanes">
+							<div class="lane l0">1</div>
+							<div class="lane l1">2</div>
+							<div class="lane l2">3</div>
+							<div class="lane l3">4</div>
+						</div>
+					</div>
+					<div class="op-row">
+						<div class="op-lbl">VPADDQ</div>
+						<div style="font-family:var(--mono);font-size:11px;color:var(--text-xdim);">+ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; + &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; + &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; +</div>
+					</div>
+					<div class="reg-row">
+						<div class="reg-lbl">y1</div>
+						<div class="lanes">
+							<div class="lane l0">5</div>
+							<div class="lane l1">6</div>
+							<div class="lane l2">7</div>
+							<div class="lane l3">8</div>
+						</div>
+					</div>
+					<div class="op-row">
+						<div class="op-lbl">=</div>
+						<div style="font-family:var(--mono);font-size:11px;color:var(--text-xdim);">─────────────────────────────────────────────────────────</div>
+					</div>
+					<div class="reg-row">
+						<div class="reg-lbl">y0 (updated)</div>
+						<div class="lanes">
+							<div class="lane accent">6</div>
+							<div class="lane accent">8</div>
+							<div class="lane accent">10</div>
+							<div class="lane accent">12</div>
+						</div>
+					</div>
+				</div>
+				<div class="diagram-caption"><code>y0.Add(y1)</code> compiles to <code>VPADDQ</code> — add packed quadwords. 4 additions in 1 instruction.</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 3 — Horizontal reduction: 4 lanes → 1 scalar</div>
+				<div class="scroll-hint">
+					<div class="reg-row">
+						<div class="reg-lbl" style="color:var(--text-b);">y0</div>
+						<div class="lanes">
+							<div class="lane l0">6</div>
+							<div class="lane l1">8</div>
+							<div class="lane l2">10</div>
+							<div class="lane l3">12</div>
+						</div>
+					</div>
+					<div style="height:10px;"></div>
+					<div class="reg-row">
+						<div class="reg-lbl">x0 = GetLo()</div>
+						<div class="lanes">
+							<div class="lane l0">6</div>
+							<div class="lane l1">8</div>
+						</div>
+					</div>
+					<div class="reg-row">
+						<div class="reg-lbl">x1 = GetHi()</div>
+						<div class="lanes">
+							<div class="lane l2">10</div>
+							<div class="lane l3">12</div>
+						</div>
+					</div>
+					<div class="op-row">
+						<div class="op-lbl">Add</div>
+						<div style="font-family:var(--mono);font-size:11px;color:var(--text-xdim);">────────────────────────────────</div>
+					</div>
+					<div class="reg-row">
+						<div class="reg-lbl">x0</div>
+						<div class="lanes">
+							<div class="lane accent">16</div>
+							<div class="lane accent">20</div>
+						</div>
+					</div>
+					<div style="height:6px;"></div>
+					<div class="reg-row">
+						<div class="reg-lbl" style="color:var(--text-b);">sum =</div>
+						<div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent2);">16 + 20 = 36</div>
+					</div>
+				</div>
+				<div class="diagram-caption">
+					Split the 256-bit register into two 128-bit halves, add them, then extract both remaining scalars and add.
+					This "tree reduction" pattern is standard — there's no single x86 instruction for a horizontal sum.
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">Step 4 — Scalar tail</div>
+				<div class="reg-row">
+					<div class="reg-lbl" style="color:var(--text-b);">remaining</div>
+					<div class="lanes">
+						<div class="lane dim">9</div>
+					</div>
+				</div>
+				<div style="height:6px;"></div>
+				<div class="reg-row">
+					<div class="reg-lbl" style="color:var(--text-b);">final sum =</div>
+					<div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent2);">36 + 9 = 45</div>
+				</div>
+				<div class="diagram-caption">Element 9 (index 8) doesn't fill a 4-wide vector, so the scalar tail loop handles it. Verify: 1+2+3+4+5+6+7+8+9 = 45 ✓</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The structural pattern</h2>
+
+			<p>Every SIMD function follows this skeleton:</p>
+
+			<div class="codeblock">func VectorOp(data []T) R {
+    i := 0
+    n := len(data)
+    var result R
+
+    // 1. Check: do we have enough data for at least one vector?
+    if n >= LANE_COUNT {
+        // 2. Initialize accumulator from first vector load
+        acc := archsimd.Load...Slice(data[0:LANE_COUNT])
+
+        // 3. Main loop: process LANE_COUNT elements per iteration
+        loopEnd := n - n%LANE_COUNT
+        for i = LANE_COUNT; i < loopEnd; i += LANE_COUNT {
+            v := archsimd.Load...Slice(data[i : i+LANE_COUNT])
+            acc = acc.Op(v)
+        }
+
+        // 4. Horizontal reduction (if accumulating to scalar)
+        result = reduce(acc)
+    }
+
+    // 5. Scalar tail for remainder
+    for ; i < n; i++ {
+        result = scalarOp(result, data[i])
+    }
+    return result
+}</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: PRACTICAL NOTES                            -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-practical">
+
+		<div class="section">
+			<h2>Build setup</h2>
+
+			<div class="codeblock">GOEXPERIMENT=simd go build ./...
+GOEXPERIMENT=simd go test -bench . ./...</div>
+
+			<p>The build tag <code>//go:build goexperiment.simd && amd64</code> is required on files using <code>archsimd</code>. Without <code>GOEXPERIMENT=simd</code>, the package doesn't exist — import fails at compile time, not runtime. You'll need Go 1.26+.</p>
+		</div>
+
+		<div class="section">
+			<h2>Slice loads and bounds checking</h2>
+
+			<p><code>LoadFloat32x8Slice(s)</code> will bounds-check that <code>len(s) >= 8</code>. In a tight loop, subslicing like <code>a[i:i+8]</code> generates a bounds check on every iteration. Two ways to eliminate this overhead:</p>
+
+			<div class="codeblock">// Option A: subslice once, loop on the subslice
+chunk := a[i:loopEnd]
+for j := 0; j+8 <= len(chunk); j += 8 {
+    v := archsimd.LoadFloat32x8Slice(chunk[j:])
+    // ...
+}
+
+// Option B: use unsafe.Pointer + LoadFloat32x8 (no bounds check)
+ptr := unsafe.Pointer(&a[0])
+for i := 0; i < loopEnd; i += 8 {
+    v := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Add(ptr, i*4)))
+    // ...
+}</div>
+
+			<p>Option A is idiomatic Go. Option B avoids bounds checks entirely but drops safety — the same tradeoff as always with <code>unsafe</code>.</p>
+		</div>
+
+		<div class="section">
+			<h2>ClearAVXUpperBits</h2>
+
+			<p>On older hardware, mixing 256-bit AVX instructions with legacy 128-bit SSE can cause a performance penalty. The CPU must save/restore the upper 128 bits of YMM registers when transitioning between modes. <code>archsimd.ClearAVXUpperBits()</code> issues a <code>VZEROUPPER</code> instruction to avoid this stall.</p>
+
+			<p>In practice: call it after a block of AVX2 code before returning to non-SIMD code, especially if you're in a library that might be called from SSE-using code. Modern CPUs (Zen 3+, most Intel since Skylake) handle this automatically, but it's cheap insurance.</p>
+		</div>
+
+		<div class="section">
+			<h2>When SIMD doesn't help</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Situation</th>
+						<th>Why SIMD struggles</th>
+					</tr>
+					<tr>
+						<td>Small arrays (&lt;32 elements)</td>
+						<td>Setup/tail overhead dominates. Scalar loop is fast enough.</td>
+					</tr>
+					<tr>
+						<td>Memory-bound workloads</td>
+						<td>Already waiting on RAM. Wider ALU doesn't help when the bus is saturated.</td>
+					</tr>
+					<tr>
+						<td>Branchy per-element logic</td>
+						<td>Masks can simulate conditionals, but if every lane takes a different path, you're computing all paths and discarding most work.</td>
+					</tr>
+					<tr>
+						<td>Non-contiguous / scattered data</td>
+						<td>Gather/scatter instructions exist but are much slower than contiguous loads. Restructure data first.</td>
+					</tr>
+					<tr>
+						<td>Cross-lane dependencies</td>
+						<td>If element <code>i</code>'s result depends on element <code>i-1</code>, you can't parallelize across lanes.</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The two-level roadmap</h2>
+
+			<p>Go's SIMD plan is layered. <code>archsimd</code> is the low-level foundation — architecture-specific, 1:1 with hardware instructions, for power users. On top of it, the Go team plans a <strong>portable high-level vector API</strong> (inspired by C++ Highway) that abstracts over architectures. The high-level API would let you write SIMD code once and have it work on AMD64, ARM64 (NEON/SVE), and future architectures.</p>
+
+			<p>For now, <code>archsimd</code> is AMD64-only. ARM64 support (NEON, SVE) is expected in future releases. If you need portability today, write your SIMD code behind a build-tagged file and provide a scalar fallback for other platforms.</p>
+		</div>
+
+		<div class="section">
+			<h2>Cheat sheet</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Task</th>
+						<th>Pattern</th>
+					</tr>
+					<tr>
+						<td>Enable SIMD</td>
+						<td><code>GOEXPERIMENT=simd go build</code></td>
+					</tr>
+					<tr>
+						<td>Import</td>
+						<td><code>import "simd/archsimd"</code></td>
+					</tr>
+					<tr>
+						<td>Build constraint</td>
+						<td><code>//go:build goexperiment.simd && amd64</code></td>
+					</tr>
+					<tr>
+						<td>Load from slice</td>
+						<td><code>archsimd.LoadFloat32x8Slice(s)</code></td>
+					</tr>
+					<tr>
+						<td>Broadcast scalar</td>
+						<td><code>archsimd.BroadcastFloat32x8(x)</code></td>
+					</tr>
+					<tr>
+						<td>Lane-wise op</td>
+						<td><code>v1.Add(v2)</code>, <code>v1.Mul(v2)</code></td>
+					</tr>
+					<tr>
+						<td>FMA</td>
+						<td><code>v1.MulAdd(v2, v3)</code> → v1*v2+v3</td>
+					</tr>
+					<tr>
+						<td>Compare</td>
+						<td><code>v1.Greater(v2)</code> → <code>Mask32x8</code></td>
+					</tr>
+					<tr>
+						<td>Conditional select</td>
+						<td><code>v1.Merge(v2, mask)</code></td>
+					</tr>
+					<tr>
+						<td>Store to slice</td>
+						<td><code>v.StoreSlice(s)</code></td>
+					</tr>
+					<tr>
+						<td>Split 256→128</td>
+						<td><code>v.GetLo()</code>, <code>v.GetHi()</code></td>
+					</tr>
+					<tr>
+						<td>Extract scalar</td>
+						<td><code>v.GetElem(i)</code></td>
+					</tr>
+					<tr>
+						<td>Check AVX2</td>
+						<td><code>archsimd.X86.HasAVX2()</code></td>
+					</tr>
+					<tr>
+						<td>Cleanup after AVX</td>
+						<td><code>archsimd.ClearAVXUpperBits()</code></td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+	</div>
+
+</div>
+
+<script>
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
