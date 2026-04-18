@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Circular Buffers — From First Principles</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+          --head: #f06565;    /* red — write pointer */
+          --tail: #3d9be8;    /* blue — read pointer */
+          --data: #4dc462;    /* green — stored value */
+          --mask: #e8b834;    /* yellow — mask / highlight */
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+      }
+
+      * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+      }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      /* ── Layout ── */
+      .page {
+          max-width: 1080px;
+          margin: 0 auto;
+          padding: 48px 24px 100px;
+      }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      .back-link {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          text-decoration: none;
+          display: inline-block;
+          margin-bottom: 24px;
+          letter-spacing: 0.3px;
+      }
+
+      /* ── Tabs ── */
+      .tab-bar {
+          display: flex;
+          gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          justify-content: center;
+      }
+
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+
+      .tab-btn:hover {
+          color: var(--text);
+          background: var(--surface2);
+      }
+
+      .tab-btn.active {
+          color: #fff;
+          background: var(--accent);
+      }
+
+      .tab-panel {
+          display: none;
+      }
+
+      .tab-panel.active {
+          display: block;
+          animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+      }
+
+      /* ── Prose ── */
+      .section { margin-bottom: 40px; }
+
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .section p { margin-bottom: 14px; }
+      .section p:last-child { margin-bottom: 0; }
+
+      strong { color: var(--text-b); font-weight: 600; }
+
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      /* ── Diagrams ── */
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* ── Ring-state (linear) visualization ── */
+      .ringstate {
+          margin: 14px 0 18px;
+          padding: 16px 18px;
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+      }
+
+      .rs-label {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--text-b);
+          margin-bottom: 12px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+      }
+
+      .rs-label .rs-tag {
+          font-size: 9px;
+          padding: 2px 7px;
+          border-radius: 3px;
+          background: var(--surface3);
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+          font-weight: 500;
+      }
+
+      .rs-row {
+          min-width: 440px;
+      }
+
+      .rs-idxs, .rs-slots, .rs-marks {
+          display: flex;
+          gap: 4px;
+      }
+
+      .rs-idxs { margin-bottom: 4px; }
+
+      .rs-idx {
+          width: 46px;
+          text-align: center;
+          font-family: var(--mono);
+          font-size: 10px;
+          color: var(--text-xdim);
+          flex-shrink: 0;
+      }
+
+      .rs-slot {
+          width: 46px;
+          height: 46px;
+          border: 1px solid var(--border);
+          border-radius: 5px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: var(--mono);
+          font-size: 17px;
+          font-weight: 600;
+          background: var(--bg);
+          color: var(--text-xdim);
+          flex-shrink: 0;
+      }
+
+      .rs-slot.filled {
+          background: rgba(77, 196, 98, 0.08);
+          border-color: rgba(77, 196, 98, 0.28);
+          color: var(--data);
+      }
+
+      .rs-slot.stale {
+          background: var(--bg);
+          border-style: dashed;
+          color: var(--text-xdim);
+          text-decoration: line-through;
+          text-decoration-color: var(--text-xdim);
+          opacity: 0.55;
+      }
+
+      .rs-slot.writing {
+          background: rgba(240, 101, 101, 0.12);
+          border-color: rgba(240, 101, 101, 0.45);
+          color: var(--head);
+      }
+
+      .rs-slot.reading {
+          background: rgba(61, 155, 232, 0.12);
+          border-color: rgba(61, 155, 232, 0.45);
+          color: var(--tail);
+      }
+
+      .rs-marks {
+          margin-top: 6px;
+          height: 36px;
+          position: relative;
+      }
+
+      .rs-mark {
+          width: 46px;
+          text-align: center;
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          flex-shrink: 0;
+          line-height: 1.3;
+      }
+
+      .rs-mark.head { color: var(--head); }
+      .rs-mark.tail { color: var(--tail); }
+      .rs-mark.both { color: var(--accent2); }
+
+      .rs-mark .rs-arrow {
+          font-size: 14px;
+          display: block;
+          line-height: 1;
+          margin-bottom: 1px;
+      }
+
+      .rs-meta {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 12px;
+          padding-top: 10px;
+          border-top: 1px dashed var(--border);
+      }
+
+      .rs-meta .mk { color: var(--text-b); }
+      .rs-meta .mh { color: var(--head); }
+      .rs-meta .mt { color: var(--tail); }
+      .rs-meta .mf { color: var(--warn); }
+
+      /* ── Ring SVG ──[118;1:3u */
+      .ring-svg {
+          display: block;
+          margin: 10px auto;
+          max-width: 100%;
+      }
+
+      /* ── Bit grid (reused for mask trick) ── */
+      .bit-row {
+          display: flex;
+          align-items: center;
+          margin-bottom: 3px;
+      }
+
+      .bit-lbl {
+          width: 140px;
+          flex-shrink: 0;
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          text-align: right;
+          padding-right: 14px;
+      }
+
+      .bits { display: flex; gap: 1px; }
+
+      .b {
+          width: 26px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: var(--mono);
+          font-size: 12px;
+          font-weight: 600;
+          border-radius: 2px;
+      }
+
+      .b.r { background: rgba(240, 101, 101, 0.09); color: var(--head); }
+      .b.y { background: rgba(232, 184, 52, 0.09); color: var(--mask); }
+      .b.g { background: rgba(77, 196, 98, 0.09); color: var(--data); }
+      .b.z { background: rgba(80, 80, 100, 0.05); color: #333850; }
+
+      .divider-row {
+          display: flex;
+          align-items: center;
+          margin: 6px 0;
+      }
+
+      .div-lbl {
+          width: 140px;
+          flex-shrink: 0;
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          color: var(--accent);
+          text-align: right;
+          padding-right: 14px;
+      }
+
+      .div-line {
+          flex: 1;
+          height: 1px;
+          background: var(--border);
+      }
+
+      /* ── Code block ── */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.65;
+          overflow-x: auto;
+          color: var(--text);
+          white-space: pre;
+      }
+
+      /* ── Callout ── */
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+
+      /* ── Table ── */
+      .tbl-wrap { overflow-x: auto; margin: 16px 0; }
+
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+          vertical-align: top;
+      }
+
+      tr:last-child td { border-bottom: none; }
+
+      /* ── Inline colored labels ── */
+      .ch { color: var(--head); }
+      .ct { color: var(--tail); }
+      .cd { color: var(--data); }
+      .cm { color: var(--mask); }
+      .cp { color: var(--accent2); }
+
+      .scroll-hint { min-width: 580px; }
+
+      @media (max-width: 640px) {
+          .tab-btn { font-size: 10px; padding: 7px 10px; }
+
+          .rs-row { min-width: 380px; }
+          .rs-idx, .rs-slot, .rs-mark { width: 38px; }
+          .rs-slot { height: 38px; font-size: 14px; }
+
+          .bit-lbl, .div-lbl { width: 90px; font-size: 9px; }
+          .b { width: 20px; height: 22px; font-size: 10px; }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<a class="back-link" href="/lab/">← back to lab</a>
+
+	<div class="page-header">
+		<h1>circular buffers from first principles</h1>
+		<div class="sub">the ring buffer · FIFO in fixed memory · O(1) push and pop · for developers who want the full picture</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="problem">The Problem</button>
+		<button class="tab-btn" data-tab="concepts">Core Concepts</button>
+		<button class="tab-btn" data-tab="operations">Operations</button>
+		<button class="tab-btn" data-tab="ambiguity">Full vs Empty</button>
+		<button class="tab-btn" data-tab="perf">Performance</button>
+		<button class="tab-btn" data-tab="impl">Implementation</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE PROBLEM                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-problem">
+
+		<div class="section">
+			<h2>Why does the ring buffer exist?</h2>
+
+			<p>You have a producer that hands you data piece by piece — bytes from a UART, samples from a sound card, log lines from worker threads, network packets, key events. You have a consumer that processes them in order, but at its own pace. Between the two, you need a <strong>FIFO queue</strong>: first in, first out.</p>
+
+			<p>Now add the real-world constraint: this runs on a microcontroller with 8 KB of RAM, or inside an audio callback that must not allocate, or in a kernel module where <code>malloc</code> isn't an option. You need a queue <strong>in a fixed amount of memory, with no allocation, no copying, and O(1) push and pop</strong>.</p>
+
+			<p>The naive alternatives fall apart:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Approach</th>
+						<th>Push</th>
+						<th>Pop</th>
+						<th>Why it fails</th>
+					</tr>
+					<tr>
+						<td>Growable array (push back, pop front)</td>
+						<td>O(1) amortised</td>
+						<td>O(n) — shift everything left</td>
+						<td>Pop is linear. Audio callback dies.</td>
+					</tr>
+					<tr>
+						<td>Linked list</td>
+						<td>O(1)</td>
+						<td>O(1)</td>
+						<td>Every push allocates. Terrible cache behaviour. No fixed memory bound.</td>
+					</tr>
+					<tr>
+						<td>Fixed array, shift on pop</td>
+						<td>O(1)</td>
+						<td>O(n) — memmove</td>
+						<td>Same memmove problem as the first row.</td>
+					</tr>
+					<tr>
+						<td>Fixed array, never shift</td>
+						<td>O(1)</td>
+						<td>O(1)</td>
+						<td>Runs out of space after N pushes, even if you've popped everything.</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>The last row is almost right. The missing insight: once the write cursor walks off the end of the array, <strong>wrap it back to the start</strong>. The cells we popped from are free again — reuse them. The array is no longer a line; it's a ring.</p>
+		</div>
+
+		<div class="section">
+			<h2>The core idea in one sentence</h2>
+
+			<div class="callout">
+				<strong>A circular buffer is a fixed-size array with two indices — a write position and a read position — that both wrap around modulo the array size.</strong> Pushing advances the write index; popping advances the read index. The "queue" is the segment between them.
+			</div>
+
+			<p>No allocation. No copying. No shifting. Every operation touches exactly one slot and bumps one counter. Memory usage is a fixed, predictable <code>sizeof(slot) × N</code>.</p>
+
+			<p>The trade you accept: capacity is bounded. Once the ring is full, you must either refuse new writes, overwrite the oldest, or block the producer. That's a decision to make per use-case — and the interesting one.</p>
+		</div>
+
+		<div class="section">
+			<h2>Where you find them in real systems</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Context</th>
+						<th>Producer → Consumer</th>
+						<th>Full-buffer policy</th>
+					</tr>
+					<tr>
+						<td>UART / serial I/O</td>
+						<td>ISR writes, main loop reads</td>
+						<td>Drop newest, raise overflow flag</td>
+					</tr>
+					<tr>
+						<td>Audio playback</td>
+						<td>App thread writes, DMA reads</td>
+						<td>Refuse; producer must wait</td>
+					</tr>
+					<tr>
+						<td>Network RX rings (NIC drivers)</td>
+						<td>NIC DMA writes, kernel reads</td>
+						<td>Drop packet, increment counter</td>
+					</tr>
+					<tr>
+						<td>Logging / tracing (<code>dmesg</code>, <code>perf</code>)</td>
+						<td>Many writers, one reader</td>
+						<td>Overwrite oldest (newest wins)</td>
+					</tr>
+					<tr>
+						<td>Game input events</td>
+						<td>OS writes, game loop reads each frame</td>
+						<td>Drop oldest or newest depending on taste</td>
+					</tr>
+					<tr>
+						<td>SPSC queues between threads</td>
+						<td>One producer thread, one consumer</td>
+						<td>Varies; lock-free variant common</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>The pattern shows up anywhere a fast producer hands bounded work to a slower (or differently-paced) consumer without the two needing to rendezvous on every item.</p>
+		</div>
+
+		<div class="section">
+			<h2>What "circular" actually means</h2>
+
+			<p>The memory itself is still a flat, contiguous array — there's nothing circular about the bytes in RAM. What's circular is the <strong>index arithmetic</strong>: when the write pointer reaches the end, it goes to 0 instead of running off. The ring lives in your head (and in the modulo operator), not in the hardware.</p>
+
+			<p>This is worth internalising because it explains both the efficiency (still linear memory, still prefetchable, still cache-friendly) and the gotchas (bulk reads that cross the wrap point need two <code>memcpy</code> calls, not one).</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: CORE CONCEPTS                              -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-concepts">
+
+		<div class="section">
+			<h2>The anatomy of a ring</h2>
+
+			<p>Five pieces of state. That's the entire data structure:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Field</th>
+						<th>Type</th>
+						<th>Meaning</th>
+					</tr>
+					<tr>
+						<td><code>buf</code></td>
+						<td><code>T *</code></td>
+						<td>Backing storage. Fixed allocation. Static array, stack, or <code>malloc</code>'d once.</td>
+					</tr>
+					<tr>
+						<td><code>cap</code></td>
+						<td><code>size_t</code></td>
+						<td>Total slots in <code>buf</code>. Never changes after init.</td>
+					</tr>
+					<tr>
+						<td><span class="ch">head</span></td>
+						<td><code>size_t</code></td>
+						<td>Index where the <span class="ch">next push</span> will land. Advances on push.</td>
+					</tr>
+					<tr>
+						<td><span class="ct">tail</span></td>
+						<td><code>size_t</code></td>
+						<td>Index where the <span class="ct">next pop</span> will read from. Advances on pop.</td>
+					</tr>
+					<tr>
+						<td><code>count</code> <span style="color:var(--text-dim);">(optional)</span></td>
+						<td><code>size_t</code></td>
+						<td>Number of filled slots right now. Optional; some variants derive it from head and tail instead.</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Some authors name head/tail differently — <code>write/read</code>, <code>in/out</code>, <code>producer/consumer</code>, <code>front/back</code>. The naming is a swamp; the <strong>semantics</strong> are what matters: one index names "where to put new data", the other names "where to take old data".</p>
+
+			<div class="callout warn">
+				Watch the naming conventions in any given codebase. Linux's <code>kfifo</code> calls them <code>in</code> and <code>out</code>. Some textbooks swap head and tail relative to what you'll see here. When reading code, look at which index the push operation modifies — that's the "write" side, whatever it's called.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The ring, drawn as a ring</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">Capacity 8 ring · mid-life state</div>
+
+				<svg class="ring-svg" width="380" height="360" viewBox="0 0 380 360" xmlns="http://www.w3.org/2000/svg">
+					<defs>
+						<marker id="arrhead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+							<path d="M0,0 L0,6 L9,3 z" fill="#f06565"/>
+						</marker>
+						<marker id="arrtail" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+							<path d="M0,0 L0,6 L9,3 z" fill="#3d9be8"/>
+						</marker>
+					</defs>
+
+					<!-- 8 slots arranged in a circle. center (190,180), radius 110 -->
+					<!-- slot i at angle = -90 + i*45 deg -->
+
+					<!-- slot 0 (top) - filled C -->
+					<circle cx="190" cy="70"  r="28" fill="rgba(77,196,98,0.08)" stroke="rgba(77,196,98,0.3)" stroke-width="1.5"/>
+					<text x="190" y="75" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="600" fill="#4dc462">C</text>
+					<text x="190" y="36" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">0</text>
+
+					<!-- slot 1 (top-right) - filled D -->
+					<circle cx="268" cy="102" r="28" fill="rgba(77,196,98,0.08)" stroke="rgba(77,196,98,0.3)" stroke-width="1.5"/>
+					<text x="268" y="107" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="600" fill="#4dc462">D</text>
+					<text x="293" y="82" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">1</text>
+
+					<!-- slot 2 (right) - empty, head points here -->
+					<circle cx="300" cy="180" r="28" fill="#0b0d11" stroke="#232838" stroke-width="1.5" stroke-dasharray="3 3"/>
+					<text x="300" y="185" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="600" fill="#3b4058">·</text>
+					<text x="340" y="184" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">2</text>
+
+					<!-- slot 3 (bottom-right) - empty -->
+					<circle cx="268" cy="258" r="28" fill="#0b0d11" stroke="#232838" stroke-width="1.5" stroke-dasharray="3 3"/>
+					<text x="268" y="263" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="600" fill="#3b4058">·</text>
+					<text x="294" y="284" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">3</text>
+
+					<!-- slot 4 (bottom) - empty -->
+					<circle cx="190" cy="290" r="28" fill="#0b0d11" stroke="#232838" stroke-width="1.5" stroke-dasharray="3 3"/>
+					<text x="190" y="295" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="600" fill="#3b4058">·</text>
+					<text x="190" y="334" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">4</text>
+
+					<!-- slot 5 (bottom-left) - empty -->
+					<circle cx="112" cy="258" r="28" fill="#0b0d11" stroke="#232838" stroke-width="1.5" stroke-dasharray="3 3"/>
+					<text x="112" y="263" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="600" fill="#3b4058">·</text>
+					<text x="86"  y="284" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">5</text>
+
+					<!-- slot 6 (left) - filled A, tail points here -->
+					<circle cx="80"  cy="180" r="28" fill="rgba(77,196,98,0.08)" stroke="rgba(77,196,98,0.3)" stroke-width="1.5"/>
+					<text x="80"  y="185" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="600" fill="#4dc462">A</text>
+					<text x="40"  y="184" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">6</text>
+
+					<!-- slot 7 (top-left) - filled B -->
+					<circle cx="112" cy="102" r="28" fill="rgba(77,196,98,0.08)" stroke="rgba(77,196,98,0.3)" stroke-width="1.5"/>
+					<text x="112" y="107" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="600" fill="#4dc462">B</text>
+					<text x="87"  y="82" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">7</text>
+
+					<!-- tail arrow pointing at slot 6 -->
+					<line x1="40" y1="180" x2="50" y2="180" stroke="#3d9be8" stroke-width="2" marker-end="url(#arrtail)"/>
+					<text x="30" y="160" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#3d9be8">tail</text>
+					<text x="30" y="200" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#3d9be8">read next</text>
+
+					<!-- head arrow pointing at slot 2 -->
+					<line x1="350" y1="180" x2="340" y2="180" stroke="#f06565" stroke-width="2" marker-end="url(#arrhead)"/>
+					<text x="355" y="160" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#f06565">head</text>
+					<text x="355" y="200" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#f06565">write next</text>
+
+					<!-- direction arrow in center -->
+					<path d="M 190 150 A 30 30 0 1 1 189 150" fill="none" stroke="#3b4058" stroke-width="1" stroke-dasharray="2 3"/>
+					<polygon points="162,178 155,172 162,168" fill="#3b4058"/>
+					<text x="190" y="184" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5c6380">advance</text>
+				</svg>
+
+				<div class="diagram-caption">
+					Four items stored (A, B, C, D) in slots 6, 7, 0, 1 — the queue wrapped past the end of the array.
+					<span class="ct">tail = 6</span> points at the next pop target (A).
+					<span class="ch">head = 2</span> points at the next push destination (empty).
+					The data lives in the <em>half-open</em> arc from tail up to (but not including) head, going forward.
+				</div>
+			</div>
+
+			<p>That last detail matters. The queue is <strong>[tail, head)</strong> — tail-inclusive, head-exclusive. Head always points at an empty slot (or at tail when full, as you'll see). If you've written queue code that got off-by-one, this convention is usually the one that was inconsistent.</p>
+		</div>
+
+		<div class="section">
+			<h2>Wrap-around, which is just modulo</h2>
+
+			<p>The operation that makes the ring a ring:</p>
+
+			<div class="codeblock">head = (head + 1) % cap;   // after a push
+tail = (tail + 1) % cap;   // after a pop</div>
+
+			<p>Modulo wraps the index. If <code>cap = 8</code> and <code>head = 7</code>, then after increment it becomes <code>8 % 8 = 0</code>. That's the entire circular trick. Everything else in this page is a consequence of this one line.</p>
+
+			<p>When <code>cap</code> is a power of two, you can replace <code>% cap</code> with <code>&amp; (cap - 1)</code> — same result, one instruction instead of a division. The Performance tab walks through why.</p>
+		</div>
+
+		<div class="section">
+			<h2>The state space</h2>
+
+			<p>Given head, tail, and cap, every ring sits in exactly one of these states:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>State</th>
+						<th>Condition</th>
+						<th>Push allowed?</th>
+						<th>Pop allowed?</th>
+					</tr>
+					<tr>
+						<td>Empty</td>
+						<td>head == tail AND count == 0</td>
+						<td>yes</td>
+						<td>no</td>
+					</tr>
+					<tr>
+						<td>Partially full</td>
+						<td>head != tail</td>
+						<td>yes</td>
+						<td>yes</td>
+					</tr>
+					<tr>
+						<td>Full</td>
+						<td>head == tail AND count == cap</td>
+						<td>no (or overwrite)</td>
+						<td>yes</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Notice that empty and full both satisfy <code>head == tail</code>. That collision is the single most important design problem for the whole data structure, and the next-but-one tab is entirely about resolving it.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: OPERATIONS                                 -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-operations">
+
+		<div class="section">
+			<h2>Worked example: capacity 8, full lifecycle</h2>
+
+			<p>We'll walk a single ring through every interesting state transition: partial fill, pop, wrap-around, full, pop after full. All eight slots. Eight characters pushed and popped in various orders. The state of the ring is shown before and after each operation.</p>
+
+			<p>Ring starts empty. <code>cap = 8</code>, all slots initial, head = tail = 0, count = 0. We use the explicit-count variant throughout (the Full-vs-Empty tab covers why).</p>
+		</div>
+
+		<div class="section">
+			<h2>Step 1–3 · push A, B, C</h2>
+
+			<div class="ringstate">
+				<div class="rs-label">INITIAL <span class="rs-tag">step 0</span></div>
+				<div class="rs-row">
+					<div class="rs-idxs">
+						<div class="rs-idx">0</div><div class="rs-idx">1</div><div class="rs-idx">2</div><div class="rs-idx">3</div>
+						<div class="rs-idx">4</div><div class="rs-idx">5</div><div class="rs-idx">6</div><div class="rs-idx">7</div>
+					</div>
+					<div class="rs-slots">
+						<div class="rs-slot">·</div><div class="rs-slot">·</div><div class="rs-slot">·</div><div class="rs-slot">·</div>
+						<div class="rs-slot">·</div><div class="rs-slot">·</div><div class="rs-slot">·</div><div class="rs-slot">·</div>
+					</div>
+					<div class="rs-marks">
+						<div class="rs-mark both"><span class="rs-arrow">↑</span>h,t</div>
+						<div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div>
+						<div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div>
+					</div>
+				</div>
+				<div class="rs-meta"><span class="mh">head = 0</span> · <span class="mt">tail = 0</span> · <span class="mk">count = 0</span> — empty</div>
+			</div>
+
+			<div class="ringstate">
+				<div class="rs-label">AFTER push(A) <span class="rs-tag">step 1</span></div>
+				<div class="rs-row">
+					<div class="rs-idxs">
+						<div class="rs-idx">0</div><div class="rs-idx">1</div><div class="rs-idx">2</div><div class="rs-idx">3</div>
+						<div class="rs-idx">4</div><div class="rs-idx">5</div><div class="rs-idx">6</div><div class="rs-idx">7</div>
+					</div>
+					<div class="rs-slots">
+						<div class="rs-slot filled">A</div><div class="rs-slot">·</div><div class="rs-slot">·</div><div class="rs-slot">·</div>
+						<div class="rs-slot">·</div><div class="rs-slot">·</div><div class="rs-slot">·</div><div class="rs-slot">·</div>
+					</div>
+					<div class="rs-marks">
+						<div class="rs-mark tail"><span class="rs-arrow">↑</span>tail</div>
+						<div class="rs-mark head"><span class="rs-arrow">↑</span>head</div>
+						<div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div>
+						<div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div>
+					</div>
+				</div>
+				<div class="rs-meta">wrote A at buf[0], head advanced · <span class="mh">head = 1</span> · <span class="mt">tail = 0</span> · <span class="mk">count = 1</span></div>
+			</div>
+
+			<div class="ringstate">
+				<div class="rs-label">AFTER push(B), push(C) <span class="rs-tag">step 3</span></div>
+				<div class="rs-row">
+					<div class="rs-idxs">
+						<div class="rs-idx">0</div><div class="rs-idx">1</div><div class="rs-idx">2</div><div class="rs-idx">3</div>
+						<div class="rs-idx">4</div><div class="rs-idx">5</div><div class="rs-idx">6</div><div class="rs-idx">7</div>
+					</div>
+					<div class="rs-slots">
+						<div class="rs-slot filled">A</div><div class="rs-slot filled">B</div><div class="rs-slot filled">C</div><div class="rs-slot">·</div>
+						<div class="rs-slot">·</div><div class="rs-slot">·</div><div class="rs-slot">·</div><div class="rs-slot">·</div>
+					</div>
+					<div class="rs-marks">
+						<div class="rs-mark tail"><span class="rs-arrow">↑</span>tail</div>
+						<div class="rs-mark"></div><div class="rs-mark"></div>
+						<div class="rs-mark head"><span class="rs-arrow">↑</span>head</div>
+						<div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div>
+					</div>
+				</div>
+				<div class="rs-meta"><span class="mh">head = 3</span> · <span class="mt">tail = 0</span> · <span class="mk">count = 3</span> — the queue is the half-open range [0, 3)</div>
+			</div>
+
+			<p>Every push does the same three things: store at <code>buf[head]</code>, advance head (mod cap), bump count. Three instructions after bounds checks.</p>
+		</div>
+
+		<div class="section">
+			<h2>Step 4 · pop → returns A</h2>
+
+			<div class="ringstate">
+				<div class="rs-label">AFTER pop() → A <span class="rs-tag">step 4</span></div>
+				<div class="rs-row">
+					<div class="rs-idxs">
+						<div class="rs-idx">0</div><div class="rs-idx">1</div><div class="rs-idx">2</div><div class="rs-idx">3</div>
+						<div class="rs-idx">4</div><div class="rs-idx">5</div><div class="rs-idx">6</div><div class="rs-idx">7</div>
+					</div>
+					<div class="rs-slots">
+						<div class="rs-slot stale">A</div><div class="rs-slot filled">B</div><div class="rs-slot filled">C</div><div class="rs-slot">·</div>
+						<div class="rs-slot">·</div><div class="rs-slot">·</div><div class="rs-slot">·</div><div class="rs-slot">·</div>
+					</div>
+					<div class="rs-marks">
+						<div class="rs-mark"></div>
+						<div class="rs-mark tail"><span class="rs-arrow">↑</span>tail</div>
+						<div class="rs-mark"></div>
+						<div class="rs-mark head"><span class="rs-arrow">↑</span>head</div>
+						<div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div>
+					</div>
+				</div>
+				<div class="rs-meta"><span class="mh">head = 3</span> · <span class="mt">tail = 1</span> · <span class="mk">count = 2</span> — buf[0] still contains the byte 'A' but it's no longer part of the queue</div>
+			</div>
+
+			<div class="callout">
+				<strong>Pop doesn't erase.</strong> The old byte 'A' physically remains in buf[0] — we just moved the tail past it. It's <em>stale</em>, logically gone, and the next push that reaches slot 0 will overwrite it. Zeroing popped slots is wasted work unless you're dealing with sensitive data (keys, tokens) where you want the bytes scrubbed from memory.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Step 5–9 · push D, E, F, G, H — the wrap</h2>
+
+			<p>Now we push five more. Head walks from 3 to 8 — except 8 doesn't exist, so <code>(7 + 1) % 8 = 0</code>. Head wraps back to the start of the array.</p>
+
+			<div class="ringstate">
+				<div class="rs-label">AFTER push(D), push(E), push(F), push(G) <span class="rs-tag">step 8</span></div>
+				<div class="rs-row">
+					<div class="rs-idxs">
+						<div class="rs-idx">0</div><div class="rs-idx">1</div><div class="rs-idx">2</div><div class="rs-idx">3</div>
+						<div class="rs-idx">4</div><div class="rs-idx">5</div><div class="rs-idx">6</div><div class="rs-idx">7</div>
+					</div>
+					<div class="rs-slots">
+						<div class="rs-slot stale">A</div><div class="rs-slot filled">B</div><div class="rs-slot filled">C</div><div class="rs-slot filled">D</div>
+						<div class="rs-slot filled">E</div><div class="rs-slot filled">F</div><div class="rs-slot filled">G</div><div class="rs-slot">·</div>
+					</div>
+					<div class="rs-marks">
+						<div class="rs-mark"></div>
+						<div class="rs-mark tail"><span class="rs-arrow">↑</span>tail</div>
+						<div class="rs-mark"></div><div class="rs-mark"></div>
+						<div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div>
+						<div class="rs-mark head"><span class="rs-arrow">↑</span>head</div>
+					</div>
+				</div>
+				<div class="rs-meta"><span class="mh">head = 7</span> · <span class="mt">tail = 1</span> · <span class="mk">count = 6</span> — next push will write at slot 7, then head wraps</div>
+			</div>
+
+			<div class="ringstate">
+				<div class="rs-label">AFTER push(H) — head wraps! <span class="rs-tag">step 9</span></div>
+				<div class="rs-row">
+					<div class="rs-idxs">
+						<div class="rs-idx">0</div><div class="rs-idx">1</div><div class="rs-idx">2</div><div class="rs-idx">3</div>
+						<div class="rs-idx">4</div><div class="rs-idx">5</div><div class="rs-idx">6</div><div class="rs-idx">7</div>
+					</div>
+					<div class="rs-slots">
+						<div class="rs-slot stale">A</div><div class="rs-slot filled">B</div><div class="rs-slot filled">C</div><div class="rs-slot filled">D</div>
+						<div class="rs-slot filled">E</div><div class="rs-slot filled">F</div><div class="rs-slot filled">G</div><div class="rs-slot writing">H</div>
+					</div>
+					<div class="rs-marks">
+						<div class="rs-mark head"><span class="rs-arrow">↑</span>head</div>
+						<div class="rs-mark tail"><span class="rs-arrow">↑</span>tail</div>
+						<div class="rs-mark"></div><div class="rs-mark"></div>
+						<div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div>
+					</div>
+				</div>
+				<div class="rs-meta">wrote H at buf[7], then <code>head = (7 + 1) % 8 = 0</code> · <span class="mh">head = 0</span> · <span class="mt">tail = 1</span> · <span class="mk">count = 7</span></div>
+			</div>
+
+			<p>The queue now straddles the end of the array. Logically it's B, C, D, E, F, G, H — seven elements in order. Physically, those elements occupy slots 1 through 7. Head has looped back to 0, which is currently stale (still holding 'A' from earlier).</p>
+		</div>
+
+		<div class="section">
+			<h2>Step 10 · push I — fills the ring</h2>
+
+			<div class="ringstate">
+				<div class="rs-label">AFTER push(I) — overwrites stale slot 0 <span class="rs-tag">step 10</span></div>
+				<div class="rs-row">
+					<div class="rs-idxs">
+						<div class="rs-idx">0</div><div class="rs-idx">1</div><div class="rs-idx">2</div><div class="rs-idx">3</div>
+						<div class="rs-idx">4</div><div class="rs-idx">5</div><div class="rs-idx">6</div><div class="rs-idx">7</div>
+					</div>
+					<div class="rs-slots">
+						<div class="rs-slot writing">I</div><div class="rs-slot filled">B</div><div class="rs-slot filled">C</div><div class="rs-slot filled">D</div>
+						<div class="rs-slot filled">E</div><div class="rs-slot filled">F</div><div class="rs-slot filled">G</div><div class="rs-slot filled">H</div>
+					</div>
+					<div class="rs-marks">
+						<div class="rs-mark"></div>
+						<div class="rs-mark both"><span class="rs-arrow">↑</span>h,t</div>
+						<div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div>
+						<div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div>
+					</div>
+				</div>
+				<div class="rs-meta"><span class="mh">head = 1</span> · <span class="mt">tail = 1</span> · <span class="mk">count = 8</span> · <span class="mf">FULL</span></div>
+			</div>
+
+			<p>Eight items in an 8-slot ring. Queue order: B, C, D, E, F, G, H, I. <strong>Head and tail collided</strong> — both at index 1 — but <code>count = cap</code>, so we know this is the "full" collision, not the "empty" one.</p>
+		</div>
+
+		<div class="section">
+			<h2>Step 11 · push J — rejected</h2>
+
+			<p>Calling <code>push(J)</code> now: <code>count == cap</code>, so the function returns an error code and the ring is unchanged. The policy decision ("refuse vs overwrite oldest") lives right here, at the full check. That's it.</p>
+		</div>
+
+		<div class="section">
+			<h2>Step 12 · pop → returns B</h2>
+
+			<div class="ringstate">
+				<div class="rs-label">AFTER pop() → B <span class="rs-tag">step 12</span></div>
+				<div class="rs-row">
+					<div class="rs-idxs">
+						<div class="rs-idx">0</div><div class="rs-idx">1</div><div class="rs-idx">2</div><div class="rs-idx">3</div>
+						<div class="rs-idx">4</div><div class="rs-idx">5</div><div class="rs-idx">6</div><div class="rs-idx">7</div>
+					</div>
+					<div class="rs-slots">
+						<div class="rs-slot filled">I</div><div class="rs-slot stale">B</div><div class="rs-slot filled">C</div><div class="rs-slot filled">D</div>
+						<div class="rs-slot filled">E</div><div class="rs-slot filled">F</div><div class="rs-slot filled">G</div><div class="rs-slot filled">H</div>
+					</div>
+					<div class="rs-marks">
+						<div class="rs-mark head"><span class="rs-arrow">↑</span>head</div>
+						<div class="rs-mark"></div>
+						<div class="rs-mark tail"><span class="rs-arrow">↑</span>tail</div>
+						<div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div><div class="rs-mark"></div>
+					</div>
+				</div>
+				<div class="rs-meta"><span class="mh">head = 1</span> · <span class="mt">tail = 2</span> · <span class="mk">count = 7</span> — no longer full; push can resume</div>
+			</div>
+
+			<p>Queue is now C, D, E, F, G, H, I — preserving insertion order even though the storage wraps. That's the invariant the structure maintains.</p>
+		</div>
+
+		<div class="section">
+			<h2>Operation summary</h2>
+
+			<div class="codeblock">push(x):
+    if count == cap: return ERROR_FULL
+    buf[head] = x
+    head = (head + 1) % cap
+    count += 1
+
+pop():
+    if count == 0: return ERROR_EMPTY
+    x = buf[tail]
+    tail = (tail + 1) % cap
+    count -= 1
+    return x
+
+peek():                  // non-destructive read
+    if count == 0: return ERROR_EMPTY
+    return buf[tail]</div>
+
+			<p>Three to five instructions plus the bounds check, no loops, no allocation. This is what "amortised O(1)" looks like when it's actually just O(1).</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: FULL vs EMPTY                              -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-ambiguity">
+
+		<div class="section">
+			<h2>The collision</h2>
+
+			<p>Start with an empty ring: head = tail = 0. Now push until the ring would be full — for <code>cap = 8</code>, that's 8 pushes. Each push bumps head by 1, so head takes values 1, 2, 3, …, 7, and then <code>(7 + 1) % 8 = 0</code>. Head is back at 0. Tail never moved. <strong>head == tail</strong>.</p>
+
+			<p>But we said head == tail means "empty" too. The ring is now holding 8 bytes, but the two fields we defined can't tell us that; they look identical to the empty state.</p>
+
+			<div class="callout warn">
+				<strong>The fundamental ambiguity:</strong> with just head and tail modulo cap, there are <em>cap + 1</em> possible fill levels (0, 1, 2, …, cap) but only <em>cap</em> distinct (head, tail) pairs where head == tail (there's just one — the collision). You can't inject an extra bit of information into a structure that has none to spare.
+			</div>
+
+			<p>Three classical fixes. Each one buys that extra bit somewhere.</p>
+		</div>
+
+		<div class="section">
+			<h2>Fix 1: sacrifice a slot</h2>
+
+			<p>Declare the ring "full" <strong>one short of cap</strong>. Effective capacity becomes <code>cap - 1</code>. Full is now defined as <em>"incrementing head would collide with tail"</em>, which is <code>(head + 1) % cap == tail</code>. Empty stays <code>head == tail</code>. The two conditions no longer overlap.</p>
+
+			<div class="codeblock">is_empty: head == tail
+is_full:  (head + 1) % cap == tail
+
+push:     if is_full: fail
+          buf[head] = x
+          head = (head + 1) % cap
+
+pop:      if is_empty: fail
+          x = buf[tail]
+          tail = (tail + 1) % cap</div>
+
+			<p>With <code>cap = 8</code>, you store at most 7 items. Slot between head and tail is always "wasted" — but you've eliminated the need for a count field and kept the implementation to just two indices.</p>
+
+			<p><strong>Pros:</strong> minimal state (2 fields), no count to update, classic and widely recognised in textbook code.<br>
+			<strong>Cons:</strong> one slot permanently unused. Annoying when <code>cap</code> is small or when you wanted a power-of-2 usable size.</p>
+		</div>
+
+		<div class="section">
+			<h2>Fix 2: explicit count field</h2>
+
+			<p>Keep a <code>count</code> variable. Empty is <code>count == 0</code>; full is <code>count == cap</code>. Head and tail are free to collide — the count tells you which collision it is.</p>
+
+			<div class="codeblock">is_empty: count == 0
+is_full:  count == cap
+
+push:     if count == cap: fail
+          buf[head] = x
+          head = (head + 1) % cap
+          count += 1
+
+pop:      if count == 0: fail
+          x = buf[tail]
+          tail = (tail + 1) % cap
+          count -= 1</div>
+
+			<p><strong>Pros:</strong> uses all N slots. <code>size()</code> is O(1) (just read <code>count</code>). Easy to reason about.<br>
+			<strong>Cons:</strong> extra field to maintain. <em>Concurrently</em>, updating count atomically with head/tail is the hard part — three fields can't be written in one instruction on most ISAs.</p>
+
+			<p>For single-threaded code or code with explicit locking, this is the cleanest option and the one used in the Implementation tab.</p>
+		</div>
+
+		<div class="section">
+			<h2>Fix 3: mirror-bit / extended indices</h2>
+
+			<p>The clever one. Let head and tail count <strong>up to <code>2 × cap</code></strong> (or just let them run in a full <code>size_t</code> without any modulo). When you actually dereference <code>buf</code>, take <code>head % cap</code> or <code>head &amp; mask</code> to get the real slot.</p>
+
+			<p>Now:</p>
+
+			<div class="codeblock">is_empty: head == tail
+is_full:  head - tail == cap        // not head == tail
+
+push:     if head - tail == cap: fail
+          buf[head & mask] = x        // masked only when dereferencing
+          head += 1                   // raw increment, no wrap
+
+pop:      if head == tail: fail
+          x = buf[tail & mask]
+          tail += 1</div>
+
+			<p>For <code>cap = 8</code>, valid head values are 0 through 16 (well, any value — the difference from tail is what matters). When head gets as large as tail + 8, the ring is full. When head == tail, it's empty. No collision, because head doesn't reset.</p>
+
+			<p>But wait — doesn't head overflow? Yes, eventually, after <code>2^64</code> operations on a 64-bit machine. At 1 billion ops/second, that's 584 years. The overflow is harmless anyway, because subtraction in two's complement wraps cleanly: <code>head - tail</code> gives the correct unsigned difference even across an overflow boundary, <em>as long as the difference itself fits in the type</em> (which it trivially does, bounded by <code>cap</code>).</p>
+
+			<p><strong>Pros:</strong> all N slots usable. No count field. Producer touches only head; consumer touches only tail — which is exactly what lock-free SPSC needs.<br>
+			<strong>Cons:</strong> requires careful reasoning about unsigned overflow. Less familiar idiom.</p>
+
+			<div class="callout">
+				This is the approach Linux's <code>kfifo</code> uses. It's also what most production SPSC lock-free queues do, because the head/tail separation maps cleanly onto atomic loads and stores with acquire/release semantics.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Comparison</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Aspect</th>
+						<th>Sacrifice slot</th>
+						<th>Explicit count</th>
+						<th>Extended index</th>
+					</tr>
+					<tr>
+						<td>Usable capacity</td>
+						<td>cap − 1</td>
+						<td>cap</td>
+						<td>cap</td>
+					</tr>
+					<tr>
+						<td>Extra state</td>
+						<td>none</td>
+						<td>one size_t</td>
+						<td>none (indices are wider)</td>
+					</tr>
+					<tr>
+						<td>size() cost</td>
+						<td>O(1) arithmetic</td>
+						<td>O(1) field read</td>
+						<td>O(1) arithmetic</td>
+					</tr>
+					<tr>
+						<td>Lock-free SPSC friendly</td>
+						<td>OK</td>
+						<td>hard (3 fields)</td>
+						<td>excellent (2 fields)</td>
+					</tr>
+					<tr>
+						<td>Cognitive load</td>
+						<td>low</td>
+						<td>low</td>
+						<td>medium (overflow reasoning)</td>
+					</tr>
+					<tr>
+						<td>Common use</td>
+						<td>textbooks, small embedded</td>
+						<td>general-purpose queues</td>
+						<td>kernel fifos, lock-free queues</td>
+					</tr>
+				</table>
+			</div>
+
+			<div class="callout">
+				Pick based on context. Single-threaded userspace queue — use <strong>explicit count</strong>. Kernel / lock-free SPSC — use <strong>extended index</strong>. Tiny MCU where every byte matters and you don't mind losing one slot — <strong>sacrifice slot</strong>.
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: PERFORMANCE                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-perf">
+
+		<div class="section">
+			<h2>The modulo is the bottleneck</h2>
+
+			<p>On most CPUs, integer division and modulo are among the slowest arithmetic operations. On modern x86 a 64-bit <code>DIV</code> is on the order of 20–40 cycles and is typically not pipelined. On small microcontrollers (Cortex-M0, AVR) there may be no hardware divider at all — modulo compiles to a software routine of dozens of instructions.</p>
+
+			<p>Meanwhile, the push/pop body itself is three or four instructions. The modulo dominates the cost of every single operation. Fixing it matters.</p>
+		</div>
+
+		<div class="section">
+			<h2>Power-of-2 capacity turns modulo into AND</h2>
+
+			<p>If <code>cap = 2^k</code>, then <code>x % cap</code> equals <code>x &amp; (cap - 1)</code>. Same result, one AND instruction, always 1 cycle.</p>
+
+			<p>Why it works: <code>cap = 2^k</code> means <code>cap</code> in binary is a single 1-bit followed by k zeros. And <code>cap - 1</code> is k ones in a row — the bit pattern that exactly masks "the lowest k bits". Those lowest k bits <em>are</em> the remainder modulo <code>2^k</code>.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">cap = 8 (k = 3), mask = cap − 1 = 7 = 0b111</div>
+
+				<div class="scroll-hint">
+					<div class="bit-row">
+						<div class="bit-lbl">x = 8 (just wrapped)</div>
+						<div class="bits">
+							<div class="b z">0</div><div class="b z">0</div><div class="b z">0</div><div class="b z">0</div>
+							<div class="b r">1</div><div class="b z">0</div><div class="b z">0</div><div class="b z">0</div>
+						</div>
+					</div>
+					<div class="bit-row">
+						<div class="bit-lbl">mask = 7</div>
+						<div class="bits">
+							<div class="b z">0</div><div class="b z">0</div><div class="b z">0</div><div class="b z">0</div>
+							<div class="b z">0</div><div class="b y">1</div><div class="b y">1</div><div class="b y">1</div>
+						</div>
+					</div>
+					<div class="divider-row">
+						<div class="div-lbl">AND (&amp;) =</div>
+						<div class="div-line"></div>
+					</div>
+					<div class="bit-row">
+						<div class="bit-lbl">x &amp; mask = 0 ✓</div>
+						<div class="bits">
+							<div class="b z">0</div><div class="b z">0</div><div class="b z">0</div><div class="b z">0</div>
+							<div class="b z">0</div><div class="b z">0</div><div class="b z">0</div><div class="b z">0</div>
+						</div>
+					</div>
+
+					<div style="height:12px;"></div>
+
+					<div class="bit-row">
+						<div class="bit-lbl">x = 13</div>
+						<div class="bits">
+							<div class="b z">0</div><div class="b z">0</div><div class="b z">0</div><div class="b z">0</div>
+							<div class="b r">1</div><div class="b r">1</div><div class="b z">0</div><div class="b r">1</div>
+						</div>
+					</div>
+					<div class="bit-row">
+						<div class="bit-lbl">mask = 7</div>
+						<div class="bits">
+							<div class="b z">0</div><div class="b z">0</div><div class="b z">0</div><div class="b z">0</div>
+							<div class="b z">0</div><div class="b y">1</div><div class="b y">1</div><div class="b y">1</div>
+						</div>
+					</div>
+					<div class="divider-row">
+						<div class="div-lbl">AND (&amp;) =</div>
+						<div class="div-line"></div>
+					</div>
+					<div class="bit-row">
+						<div class="bit-lbl">x &amp; mask = 5 ✓</div>
+						<div class="bits">
+							<div class="b z">0</div><div class="b z">0</div><div class="b z">0</div><div class="b z">0</div>
+							<div class="b z">0</div><div class="b g">1</div><div class="b z">0</div><div class="b g">1</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					Verify: 8 % 8 = 0, 13 % 8 = 5. The AND keeps the lowest 3 bits and discards the rest — which is exactly what modulo by 8 does.
+				</div>
+			</div>
+
+			<p>Check a few cases manually: <code>0 &amp; 7 = 0</code> · <code>7 &amp; 7 = 7</code> · <code>8 &amp; 7 = 0</code> (this is the wrap) · <code>100 &amp; 7 = 4</code> (since 100 = 12·8 + 4).</p>
+		</div>
+
+		<div class="section">
+			<h2>Non-power-of-2 capacities</h2>
+
+			<p>If you genuinely need <code>cap = 1000</code>, you have options:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Option</th>
+						<th>Tradeoff</th>
+					</tr>
+					<tr>
+						<td>Round up to next power of 2 (1024)</td>
+						<td>+2.4% memory. Eliminates modulo entirely. Almost always the right choice.</td>
+					</tr>
+					<tr>
+						<td>Keep exact <code>cap</code>, use modulo</td>
+						<td>Predictable memory. Slower increments.</td>
+					</tr>
+					<tr>
+						<td>Keep exact <code>cap</code>, use branchless conditional</td>
+						<td><code>next = head + 1; if (next == cap) next = 0;</code> — compiles to a conditional move on modern CPUs, often faster than <code>DIV</code>.</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>For anything performance-sensitive: pick power-of-2 and use the mask. The 2.4% memory isn't going to matter; the cycles will.</p>
+		</div>
+
+		<div class="section">
+			<h2>Cache behaviour</h2>
+
+			<p>The ring is a single contiguous allocation. Sequential pushes and pops walk through it linearly. Modern CPU prefetchers recognise the pattern and pull the next cache line before you ask for it. A linked-list queue of the same length has terrible cache behaviour by comparison — each node is a cache miss.</p>
+
+			<p>For small element types (bytes, words, packet descriptors), expect ring operations to be bound by memory bandwidth rather than compute. This is as fast as FIFO gets.</p>
+		</div>
+
+		<div class="section">
+			<h2>False sharing in concurrent rings</h2>
+
+			<p>When a ring is shared between a producer thread and a consumer thread (the SPSC case), <strong>head</strong> is written only by the producer and <strong>tail</strong> only by the consumer. That's the whole reason lock-free SPSC works.</p>
+
+			<p>But if head and tail sit next to each other in memory, they end up on the same 64-byte cache line. Now every write by the producer invalidates the consumer's cached copy of tail (and vice versa), forcing a cache-coherence round-trip on every single operation. This is <strong>false sharing</strong>, and it can slow a "lock-free" queue to below what a plain mutex would give you.</p>
+
+			<p>The fix is mechanical: pad the struct so head and tail live on different cache lines.</p>
+
+			<div class="codeblock">typedef struct {
+    uint8_t *buf;
+    size_t   cap;
+    size_t   mask;
+
+    alignas(64) size_t head;     // producer owns this cache line
+    char     pad1[64 - sizeof(size_t)];
+
+    alignas(64) size_t tail;     // consumer owns this cache line
+    char     pad2[64 - sizeof(size_t)];
+} spsc_ring_t;</div>
+
+			<p>Measure before padding — for single-threaded rings this is pure bloat. But once multiple cores are involved, padding is the difference between "sharing nothing" and "fighting on every operation".</p>
+		</div>
+
+		<div class="section">
+			<h2>Bulk transfers and the wrap</h2>
+
+			<p>Pushing <em>one</em> byte is easy. Pushing a 500-byte chunk into a ring that has 300 bytes free before the end of the array and another 200 after — that's two <code>memcpy</code> calls, not one. The split is at the wrap.</p>
+
+			<div class="codeblock">// bulk push of `n` bytes starting at `src`, returns bytes actually pushed
+size_t ring_push_bulk(ring_t *r, const uint8_t *src, size_t n) {
+    size_t free = r->cap - r->count;
+    if (n > free) n = free;                  // truncate to available space
+
+    size_t first = r->cap - r->head;         // bytes until end of array
+    if (first > n) first = n;
+
+    memcpy(r->buf + r->head, src, first);    // segment 1
+    memcpy(r->buf, src + first, n - first);  // segment 2 (0 bytes if no wrap)
+
+    r->head  = (r->head + n) &amp; r->mask;
+    r->count += n;
+    return n;
+}</div>
+
+			<p>Note the second <code>memcpy</code> is safe even when <code>n - first == 0</code> — the C library handles zero-length copies. The split is where all the complexity of bulk I/O on a ring lives.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: IMPLEMENTATION                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-impl">
+
+		<div class="section">
+			<h2>A complete, usable C implementation</h2>
+
+			<p>A byte-oriented ring using the <strong>explicit count</strong> variant with <strong>power-of-2 capacity</strong> for the mask trick. Single-threaded. No allocation inside the ring itself — caller provides the backing storage. Self-contained header, suitable to drop into an embedded or kernel-adjacent project.</p>
+
+			<div class="codeblock">// ring.h
+#ifndef RING_H
+#define RING_H
+
+#include &lt;stddef.h&gt;
+#include &lt;stdint.h&gt;
+#include &lt;stdbool.h&gt;
+
+typedef struct {
+    uint8_t *buf;     // backing storage, caller-owned
+    size_t   cap;     // must be a power of 2
+    size_t   mask;    // cap - 1, cached for speed
+    size_t   head;    // next write position, always &lt; cap
+    size_t   tail;    // next read position,  always &lt; cap
+    size_t   count;   // filled slots, 0..cap
+} ring_t;
+
+typedef enum {
+    RING_OK        =  0,
+    RING_EMPTY     = -1,
+    RING_FULL      = -2,
+    RING_BAD_CAP   = -3,  // cap was 0 or not power of 2
+} ring_err_t;
+
+// Initialise. `storage` must point to at least `cap` bytes.
+// `cap` MUST be a power of 2 (1, 2, 4, 8, 16, ...).
+ring_err_t ring_init(ring_t *r, uint8_t *storage, size_t cap);
+
+// Queries.
+static inline bool   ring_is_empty(const ring_t *r) { return r-&gt;count == 0; }
+static inline bool   ring_is_full (const ring_t *r) { return r-&gt;count == r-&gt;cap; }
+static inline size_t ring_size    (const ring_t *r) { return r-&gt;count; }
+static inline size_t ring_free    (const ring_t *r) { return r-&gt;cap - r-&gt;count; }
+
+// Single-byte operations.
+ring_err_t ring_push(ring_t *r, uint8_t value);
+ring_err_t ring_pop (ring_t *r, uint8_t *out);
+ring_err_t ring_peek(const ring_t *r, uint8_t *out);
+
+// Bulk operations. Return number of bytes actually transferred.
+size_t ring_push_bulk(ring_t *r, const uint8_t *src, size_t n);
+size_t ring_pop_bulk (ring_t *r, uint8_t *dst, size_t n);
+
+#endif</div>
+
+			<div class="codeblock">// ring.c
+#include "ring.h"
+#include &lt;string.h&gt;
+
+static bool is_power_of_2(size_t x) {
+    return x != 0 &amp;&amp; (x &amp; (x - 1)) == 0;
+}
+
+ring_err_t ring_init(ring_t *r, uint8_t *storage, size_t cap) {
+    if (!is_power_of_2(cap)) return RING_BAD_CAP;
+    r-&gt;buf   = storage;
+    r-&gt;cap   = cap;
+    r-&gt;mask  = cap - 1;
+    r-&gt;head  = 0;
+    r-&gt;tail  = 0;
+    r-&gt;count = 0;
+    return RING_OK;
+}
+
+ring_err_t ring_push(ring_t *r, uint8_t value) {
+    if (r-&gt;count == r-&gt;cap) return RING_FULL;
+    r-&gt;buf[r-&gt;head] = value;
+    r-&gt;head = (r-&gt;head + 1) &amp; r-&gt;mask;
+    r-&gt;count++;
+    return RING_OK;
+}
+
+ring_err_t ring_pop(ring_t *r, uint8_t *out) {
+    if (r-&gt;count == 0) return RING_EMPTY;
+    *out = r-&gt;buf[r-&gt;tail];
+    r-&gt;tail = (r-&gt;tail + 1) &amp; r-&gt;mask;
+    r-&gt;count--;
+    return RING_OK;
+}
+
+ring_err_t ring_peek(const ring_t *r, uint8_t *out) {
+    if (r-&gt;count == 0) return RING_EMPTY;
+    *out = r-&gt;buf[r-&gt;tail];
+    return RING_OK;
+}
+
+size_t ring_push_bulk(ring_t *r, const uint8_t *src, size_t n) {
+    size_t free = r-&gt;cap - r-&gt;count;
+    if (n &gt; free) n = free;
+    if (n == 0) return 0;
+
+    size_t first = r-&gt;cap - r-&gt;head;         // bytes until array end
+    if (first &gt; n) first = n;
+
+    memcpy(r-&gt;buf + r-&gt;head, src, first);
+    if (n - first &gt; 0) {
+        memcpy(r-&gt;buf, src + first, n - first);
+    }
+
+    r-&gt;head = (r-&gt;head + n) &amp; r-&gt;mask;
+    r-&gt;count += n;
+    return n;
+}
+
+size_t ring_pop_bulk(ring_t *r, uint8_t *dst, size_t n) {
+    if (n &gt; r-&gt;count) n = r-&gt;count;
+    if (n == 0) return 0;
+
+    size_t first = r-&gt;cap - r-&gt;tail;
+    if (first &gt; n) first = n;
+
+    memcpy(dst, r-&gt;buf + r-&gt;tail, first);
+    if (n - first &gt; 0) {
+        memcpy(dst + first, r-&gt;buf, n - first);
+    }
+
+    r-&gt;tail = (r-&gt;tail + n) &amp; r-&gt;mask;
+    r-&gt;count -= n;
+    return n;
+}</div>
+		</div>
+
+		<div class="section">
+			<h2>Using it</h2>
+
+			<div class="codeblock">// Caller owns the backing storage. Nothing is malloc'd inside the ring.
+static uint8_t storage[256];
+ring_t ring;
+
+int main(void) {
+    if (ring_init(&amp;ring, storage, sizeof storage) != RING_OK) {
+        return 1;
+    }
+
+    // push three bytes
+    ring_push(&amp;ring, 'A');
+    ring_push(&amp;ring, 'B');
+    ring_push(&amp;ring, 'C');
+
+    // pop one
+    uint8_t x;
+    ring_pop(&amp;ring, &amp;x);  // x == 'A'
+
+    // bulk push
+    const uint8_t chunk[] = { 'D', 'E', 'F', 'G' };
+    ring_push_bulk(&amp;ring, chunk, sizeof chunk);
+
+    return 0;
+}</div>
+		</div>
+
+		<div class="section">
+			<h2>Design notes — why the code looks the way it does</h2>
+
+			<p><strong>Caller-owned storage.</strong> <code>ring_init</code> takes a pointer to pre-allocated memory rather than calling <code>malloc</code>. This is the difference between a library you can use in an ISR / kernel / embedded context and one you can't. If you want heap allocation, do it in a thin wrapper; the core stays allocator-agnostic.</p>
+
+			<p><strong>Power-of-2 enforced at init, not per-operation.</strong> The <code>is_power_of_2</code> check runs once in <code>ring_init</code>, so every subsequent push/pop can trust <code>mask = cap - 1</code> without re-validating. The trick <code>(x &amp; (x - 1)) == 0</code> detects powers of two: a power of two has exactly one bit set, and subtracting 1 flips that bit to 0 and every bit below it to 1 — ANDing them yields 0. For any non-power-of-two, at least one bit overlaps.</p>
+
+			<p><strong>Cached mask.</strong> We store <code>mask = cap - 1</code> once and use it in every push/pop, rather than computing it each time. One memory load instead of a subtract-immediate — probably measurable on a tight inner loop on an MCU.</p>
+
+			<p><strong>Return codes, not asserts.</strong> <code>RING_FULL</code> and <code>RING_EMPTY</code> are normal, expected conditions for a bounded queue. The caller must handle them; an assert would be inappropriate. Returning an enum keeps the interface explicit about what can go wrong.</p>
+
+			<p><strong>Bounded bulk transfer.</strong> <code>ring_push_bulk</code> returns the number of bytes actually pushed rather than failing if the input doesn't fit. This matches the <code>write(2)</code> convention and lets callers do partial-write retry loops naturally.</p>
+
+			<p><strong>No erase on pop.</strong> We leave the popped byte in the buffer. Zeroing it costs a write and buys nothing functional. If you're storing secrets (keys, session tokens), add an explicit <code>ring_pop_zero</code> variant rather than making everyone pay the cost.</p>
+		</div>
+
+		<div class="section">
+			<h2>Common traps</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Trap</th>
+						<th>What goes wrong</th>
+						<th>Fix</th>
+					</tr>
+					<tr>
+						<td>Forgetting to update <code>count</code></td>
+						<td>size() returns garbage; full/empty checks lie</td>
+						<td>Keep count update directly next to the head/tail increment — never split them across branches.</td>
+					</tr>
+					<tr>
+						<td>Using signed <code>int</code> for indices</td>
+						<td>Can go negative, corrupt mask arithmetic, crash on array deref</td>
+						<td>Always <code>size_t</code>. No exceptions.</td>
+					</tr>
+					<tr>
+						<td>Bulk copy without split</td>
+						<td>Overruns the end of the array, corrupts memory after the buffer</td>
+						<td>Two memcpys. Always. See <code>ring_push_bulk</code>.</td>
+					</tr>
+					<tr>
+						<td>Using modulo with non-power-of-2 <code>cap</code> and the mask trick</td>
+						<td><code>head &amp; (cap - 1)</code> produces nonsense indices</td>
+						<td>Either enforce power-of-2 at init, or use real <code>%</code> everywhere.</td>
+					</tr>
+					<tr>
+						<td>Accessing <code>count</code> from two threads without sync</td>
+						<td>Races; head/tail get out of sync with count</td>
+						<td>For concurrent use, switch to the extended-index variant (no count field), use atomics for head/tail.</td>
+					</tr>
+					<tr>
+						<td>Treating <code>cap == 0</code> as "empty ring"</td>
+						<td>Mask becomes <code>-1</code>, reads anywhere in address space</td>
+						<td><code>ring_init</code> rejects <code>cap == 0</code> via the power-of-2 check.</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Variants worth knowing about</h2>
+
+			<p><strong>Overwrite-on-full.</strong> For logging, tracing, and "latest N events" use cases, a full push should drop the oldest item rather than refuse. Modify <code>ring_push</code>: if full, advance tail as well as head, keep count at cap. The ring always holds the most recent <code>cap</code> items.</p>
+
+			<p><strong>SPSC lock-free.</strong> One producer thread, one consumer, no locks. Uses the extended-index variant (head and tail grow monotonically, mask applied at deref). Producer writes head with release semantics; consumer reads head with acquire. This is what production systems like LMAX Disruptor and DPDK rings use. The devil is in the memory-ordering details — don't hand-roll it unless you're sure you need to.</p>
+
+			<p><strong>Typed ring.</strong> The byte-oriented API above generalises to arbitrary types with a few macros or a typed wrapper. C11 <code>_Generic</code> or plain macro-per-type both work. Prefer a single typed file over a void-pointer "generic" implementation — it compiles better and the errors are legible.</p>
+
+			<p><strong>Iovec / zero-copy variant.</strong> For scenarios where the consumer wants to process data in place (e.g. parsing bytes from a UART ring without copying them out), expose a "peek region" API that returns a <code>{ptr, len}</code> pair — possibly two of them if the data straddles the wrap. Consumer processes in place, then calls <code>consume(n)</code> to advance tail. Avoids a copy for bulk-read paths.</p>
+		</div>
+
+		<div class="section">
+			<h2>Cheat sheet</h2>
+
+			<div class="diagram" style="padding: 20px 24px;">
+				<div style="font-family:var(--mono); font-size:12px; line-height: 2.2;">
+					<div style="color:var(--text-dim); margin-bottom: 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">
+						when the ring is …
+					</div>
+					<span class="cd">empty</span><span style="color:var(--text-xdim);"> :: </span><code>count == 0</code>
+					<span style="color:var(--text-xdim); margin: 0 10px;">·</span>
+					<span class="cd">full</span><span style="color:var(--text-xdim);"> :: </span><code>count == cap</code>
+					<span style="color:var(--text-xdim); margin: 0 10px;">·</span>
+					<span class="cd">size</span><span style="color:var(--text-xdim);"> :: </span><code>count</code>
+
+					<div style="color:var(--text-dim); margin: 16px 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">
+						push / pop in 3 lines
+					</div>
+					<span class="ch">push</span><span style="color:var(--text-xdim);"> :: </span><code>buf[head] = x; head = (head+1) &amp; mask; count++</code><br>
+					<span class="ct">pop</span><span style="color:var(--text-xdim);"> :: &nbsp;</span><code>x = buf[tail]; tail = (tail+1) &amp; mask; count--</code>
+
+					<div style="color:var(--text-dim); margin: 16px 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">
+						wrap arithmetic
+					</div>
+					<code>cap</code> <span style="color:var(--text-xdim);">power of 2</span>
+					<span style="color:var(--text-xdim); margin: 0 10px;">⇒</span>
+					<code>i % cap</code> <span style="color:var(--text-xdim);">=</span> <code>i &amp; (cap-1)</code>
+
+					<div style="color:var(--text-dim); margin: 16px 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">
+						bulk push / pop
+					</div>
+					<span style="color:var(--text-xdim);">always two memcpys — first up to end of array, second from start, second may be zero bytes</span>
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+</div>
+
+<script>
+	// Tab switching
+	document.querySelectorAll('.tab-btn').forEach(btn =&gt; {
+		btn.addEventListener('click', () =&gt; {
+			document.querySelectorAll('.tab-btn').forEach(b =&gt; b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p =&gt; p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
