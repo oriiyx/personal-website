@@ -167,8 +167,8 @@ export const commands: Record<string, (args: string[]) => Promise<string> | stri
 ██║     ███████╗   ██║   ███████╗██║  ██║    ██║██╗
 ╚═╝     ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝    ╚═╝╚═╝  v${version}
 
-Peter Paravinja | Full-Stack Developer | Golang | TypeScript | PHP | Python
-Working on web applications, mobile applications and open-source tools.
+Peter Paravinja | Full-Stack Developer | Golang | TypeScript | PHP | C lang
+Working on web applications, mobile applications and tools.
 Type 'help' to see list of available commands.
 `;
 	},
