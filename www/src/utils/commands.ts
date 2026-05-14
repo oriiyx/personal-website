@@ -36,7 +36,7 @@ const categories: [string, string[]][] = [
 ];
 
 function openUrl(url: string): void {
-	window.open(url);
+    window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 function navigateTo(path: string): void {
@@ -71,7 +71,7 @@ export const commands: Record<string, (args: string[]) => Promise<string> | stri
 	date: () => new Date().toString(),
 
 	booktime: () => {
-		openUrl('https://booktime.co');
+		// openUrl('https://booktime.co');
 		return 'Booktime is a mobile application for book reading tracking with book club functionality. Check out <a href="https://booktime.co" target="_blank">https://booktime.co</a> for more info!';
 	},
 
@@ -81,7 +81,7 @@ export const commands: Record<string, (args: string[]) => Promise<string> | stri
 	},
 
 	fritz: () => {
-		openUrl('https://github.com/oriiyx/fritz');
+		// openUrl('https://github.com/oriiyx/fritz');
 		return 'Fritz is a proof-of-concept dynamic CMS system (inspired by Pimcore) built in Golang — demonstrating how to achieve runtime flexibility in a statically typed language. Check it out at <a href="https://github.com/oriiyx/fritz" target="_blank">https://github.com/oriiyx/fritz</a>!';
 	},
 
@@ -174,23 +174,12 @@ Type 'help' to see list of available commands.
 	},
 
 	aboutme: () => `
-<span style='font-weight: bold; color: #84c138;'>Hey there! I'm Peter Paravinja</span>, a full-stack developer with 6 years of experience in building
+<span style='font-weight: bold; color: #84c138;'>Hey there! I'm Peter Paravinja</span>, a full-stack developer with 7 years of experience in building
 complex web applications and a bit of mobile development.
 
 <span style='font-weight: bold;'>CURRENT WORK</span>:
 - Working at Netis on solving the EU's IOSS compliance problem and scaling the solution
 - Building a hobby game in Unity in my spare time
-
-<span style='font-weight: bold;'>SKILLS</span>:
-- Languages: Golang, JavaScript/TypeScript, PHP, Python
-- Full development cycle: from design to deployment and marketing
-- Solo developed Booktime.co, a book reading tracking app with book club functionality
-
-<span style='font-weight: bold;'>PROJECTS</span>:
-- Booktime.co: A social book-tracking platform with book club features
-  (React Native, Remix, Golang, infrastructure, design, marketing)
-- Use 'booktime' command for more info!
-- Use 'fritz' command for more info!
 
 <span style='font-weight: bold;'>CONNECT</span>:
 - Blog: <a href="https://oriiyx.dev/" target="_blank">https://dev.to/oriiyx/</a>
