@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Modbus + BMS — From First Principles</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+          --byte0: #f06565;
+          --byte1: #4dc462;
+          --byte2: #3d9be8;
+          --c0: #f06565;
+          --c1: #e8b834;
+          --c2: #4dc462;
+          --c3: #3d9be8;
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+      }
+
+      * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+      }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      .page {
+          max-width: 1080px;
+          margin: 0 auto;
+          padding: 48px 24px 100px;
+      }
+
+      .page-header {
+          margin-bottom: 40px;
+          padding-bottom: 28px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      .tab-bar {
+          display: flex;
+          gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          justify-content: center;
+      }
+
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+
+      .tab-btn:hover {
+          color: var(--text);
+          background: var(--surface2);
+      }
+
+      .tab-btn.active {
+          color: #fff;
+          background: var(--accent);
+      }
+
+      .tab-panel {
+          display: none;
+      }
+
+      .tab-panel.active {
+          display: block;
+          animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+
+      .section {
+          margin-bottom: 40px;
+      }
+
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      .section p {
+          margin-bottom: 14px;
+      }
+
+      .section p:last-child {
+          margin-bottom: 0;
+      }
+
+      strong {
+          color: var(--text-b);
+          font-weight: 600;
+      }
+
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      /* Code block — plain monospace, no syntax spans */
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+          white-space: pre;
+      }
+
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+
+      .tbl-wrap {
+          overflow-x: auto;
+          margin: 16px 0;
+      }
+
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+
+      td {
+          padding: 8px 14px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text);
+          vertical-align: top;
+      }
+
+      tr:last-child td {
+          border-bottom: none;
+      }
+
+      /* Inline colored labels */
+      .cr { color: var(--byte0); }
+      .cg { color: var(--byte1); }
+      .cb { color: var(--byte2); }
+      .cy { color: var(--c1); }
+      .cp { color: var(--accent2); }
+
+      /* ── Wire frame diagram ── */
+      .frame {
+          display: flex;
+          gap: 0;
+          font-family: var(--mono);
+          font-size: 11px;
+          align-items: stretch;
+          flex-wrap: nowrap;
+          min-width: 580px;
+      }
+
+      .fcell {
+          flex-shrink: 0;
+          background: var(--bg);
+          border: 1px solid var(--border);
+          padding: 10px 8px 8px;
+          text-align: center;
+          margin-right: -1px;
+          min-width: 60px;
+      }
+
+      .fcell .fc-label {
+          font-size: 9px;
+          color: var(--text-dim);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 4px;
+          line-height: 1.3;
+      }
+
+      .fcell .fc-val {
+          font-size: 13px;
+          font-weight: 600;
+      }
+
+      .fcell .fc-sz {
+          font-size: 9px;
+          color: var(--text-xdim);
+          margin-top: 4px;
+      }
+
+      .fcell.mbap { background: rgba(232, 184, 52, 0.05); border-color: rgba(232, 184, 52, 0.3); }
+      .fcell.mbap .fc-val { color: var(--c1); }
+      .fcell.pdu  { background: rgba(61, 155, 232, 0.05); border-color: rgba(61, 155, 232, 0.3); }
+      .fcell.pdu .fc-val { color: var(--c3); }
+      .fcell.data { background: rgba(77, 196, 98, 0.05); border-color: rgba(77, 196, 98, 0.3); }
+      .fcell.data .fc-val { color: var(--c2); }
+
+      .frame-legend {
+          display: flex;
+          gap: 16px;
+          margin-top: 14px;
+          font-family: var(--mono);
+          font-size: 10px;
+          color: var(--text-dim);
+          flex-wrap: wrap;
+      }
+
+      .legend-swatch {
+          display: inline-block;
+          width: 10px;
+          height: 10px;
+          border-radius: 2px;
+          margin-right: 6px;
+          vertical-align: middle;
+      }
+
+      /* ── Register-type cards ── */
+      .reg-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 14px;
+          margin: 16px 0;
+      }
+
+      .reg-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 16px 18px;
+      }
+
+      .reg-card.used {
+          border-color: rgba(124, 92, 224, 0.4);
+          background: rgba(124, 92, 224, 0.04);
+      }
+
+      .reg-card .rc-name {
+          font-family: var(--mono);
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--text-b);
+          margin-bottom: 4px;
+      }
+
+      .reg-card .rc-tag {
+          font-family: var(--mono);
+          font-size: 9px;
+          color: var(--text-dim);
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 12px;
+      }
+
+      .reg-card .rc-desc {
+          font-size: 13px;
+          line-height: 1.55;
+          color: var(--text);
+      }
+
+      .reg-card .rc-stamp {
+          display: inline-block;
+          font-family: var(--mono);
+          font-size: 9px;
+          font-weight: 600;
+          padding: 2px 7px;
+          border-radius: 3px;
+          margin-top: 10px;
+          letter-spacing: 0.5px;
+      }
+
+      .rc-stamp.in-task {
+          background: rgba(124, 92, 224, 0.15);
+          color: var(--accent2);
+      }
+
+      .rc-stamp.not-in-task {
+          background: var(--surface2);
+          color: var(--text-xdim);
+      }
+
+      /* ── Cell stack diagram (BMS) ── */
+      .cell-stack {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 20px 0;
+          font-family: var(--mono);
+      }
+
+      .cell-block {
+          width: 220px;
+          padding: 18px 14px;
+          border: 2px solid;
+          border-radius: 6px;
+          margin: 4px 0;
+          text-align: center;
+          background: var(--bg);
+      }
+
+      .cell-block.c1 { border-color: var(--byte0); }
+      .cell-block.c2 { border-color: var(--byte2); }
+
+      .cell-block .cb-name {
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-bottom: 4px;
+      }
+
+      .cell-block .cb-v {
+          font-size: 22px;
+          font-weight: 700;
+      }
+
+      .cell-block.c1 .cb-v { color: var(--byte0); }
+      .cell-block.c2 .cb-v { color: var(--byte2); }
+
+      .wire-v {
+          width: 2px;
+          height: 18px;
+          background: var(--text-xdim);
+      }
+
+      .pack-terminal {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 11px;
+          color: var(--text-dim);
+          margin: 6px 0;
+      }
+
+      .pack-terminal.top { color: var(--c1); }
+      .pack-terminal.bot { color: var(--text-dim); }
+
+      /* ── Map decode rows ── */
+      .map-row {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 0;
+          margin: 14px 0;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          overflow: hidden;
+      }
+
+      .map-head {
+          padding: 12px 18px;
+          background: var(--surface2);
+          font-family: var(--mono);
+          font-size: 12px;
+          border-bottom: 1px solid var(--border);
+          display: flex;
+          gap: 14px;
+          align-items: center;
+          flex-wrap: wrap;
+      }
+
+      .map-head .mh-addr {
+          color: var(--c1);
+          font-weight: 700;
+      }
+
+      .map-head .mh-type {
+          color: var(--text-dim);
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+      }
+
+      .map-head .mh-rw {
+          color: var(--accent2);
+          font-weight: 600;
+          font-size: 10px;
+          padding: 2px 7px;
+          background: rgba(192, 132, 252, 0.1);
+          border-radius: 3px;
+      }
+
+      .map-head .mh-desc {
+          color: var(--text-b);
+          flex: 1;
+          min-width: 200px;
+      }
+
+      .map-body {
+          padding: 14px 18px;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+
+      .map-body p {
+          margin-bottom: 10px;
+      }
+
+      .map-body p:last-child {
+          margin-bottom: 0;
+      }
+
+      /* ── Flow boxes for polling ── */
+      .flow-vert {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0;
+          padding: 10px 0;
+      }
+
+      .flow-step {
+          background: var(--bg);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 10px 18px;
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text);
+          min-width: 280px;
+          text-align: center;
+      }
+
+      .flow-step .fs-tag {
+          font-size: 9px;
+          color: var(--text-dim);
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 4px;
+      }
+
+      .flow-arrow {
+          color: var(--text-xdim);
+          font-size: 16px;
+          line-height: 1;
+          padding: 4px 0;
+      }
+
+      @media (max-width: 640px) {
+          .tab-btn { font-size: 10px; padding: 7px 10px; }
+          .fcell { min-width: 48px; padding: 8px 4px 6px; }
+          .fcell .fc-val { font-size: 11px; }
+          .cell-block { width: 180px; }
+      }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<a class="back-link" href="/lab/"
+		 style="font-family:var(--mono);font-size:11px;color:var(--text-dim);text-decoration:none;display:inline-block;margin-bottom:24px;letter-spacing:0.3px;">← back to lab</a>
+
+	<div class="page-header">
+		<h1>modbus + BMS from first principles</h1>
+		<div class="sub">a backup battery, a Modbus TCP slave, and a register map — decoded</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="problem">The Problem</button>
+		<button class="tab-btn" data-tab="modbus">Modbus</button>
+		<button class="tab-btn" data-tab="registers">Register Types</button>
+		<button class="tab-btn" data-tab="bms">The BMS</button>
+		<button class="tab-btn" data-tab="balance">Balancing</button>
+		<button class="tab-btn" data-tab="apply">Your Map &amp; Polling</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE PROBLEM                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-problem">
+
+		<div class="section">
+			<h2>What the task actually asks</h2>
+
+			<p>A small physical device — the BMS (Battery Management System) — sits on the same network as your service. It has two lithium cells inside it and some control hardware. Your service needs to <strong>watch</strong> it (read voltages, current) and <strong>steer</strong> it (turn the charger on/off, configure balancing) over a protocol called <strong>Modbus TCP</strong>. Then it needs to surface all of that as a normal HTTP API for whoever consumes it next — a UI, an operator, a monitoring system.</p>
+
+			<p>So the service is essentially a <strong>translator and a controller</strong>:</p>
+
+			<ul style="margin: 10px 0 14px 22px;">
+				<li>Translator: Modbus on one side, HTTP/JSON on the other.</li>
+				<li>Controller: periodically reads sensors, decides whether to enable the charger and how to balance the cells, writes control values back.</li>
+				<li>Recorder: persists historical readings so the API can serve them.</li>
+			</ul>
+
+			<p>The unfamiliar pieces are the <em>protocol</em> (Modbus) and the <em>domain</em> (what a BMS actually manages and why). Everything else — periodic loops, HTTP routes, a database — you already know how to do.</p>
+		</div>
+
+		<div class="section">
+			<h2>Why a serial-era industrial protocol on a modern IoT device?</h2>
+
+			<p>Modbus was invented in 1979 for industrial controllers talking over RS-485 serial wires. It survives because it's <strong>brutally simple</strong>: a tiny set of read/write operations against a flat array of numbered 16-bit slots. No schemas, no service discovery, no negotiation. A device firmware author can implement the slave side in a few hundred lines of C; a client can talk to it from any language.</p>
+
+			<p>When devices got Ethernet, the protocol got wrapped — same operations, same data model, now carried inside TCP packets on port <code>502</code>. That wrapper is <strong>Modbus TCP</strong>. The BMS in this task uses it because the firmware on the device probably already spoke Modbus to its internal hardware, and exposing the same map over TCP costs almost nothing.</p>
+
+			<div class="callout">
+				<strong>Mental model:</strong> Modbus TCP is "remote memory access for embedded devices." You connect to the device and read or write its registers — a flat array of 16-bit cells — by number. There's no JSON, no objects, no method calls. Just addresses and values.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The shape of the work</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">end-to-end picture</div>
+				<div style="font-family:var(--mono); font-size: 13px; padding: 8px 0; line-height: 2.4; text-align:center;">
+					<span class="cb">HTTP client</span>
+					<span style="color:var(--text-xdim); margin: 0 10px;">↔</span>
+					<span class="cp">your Go service</span>
+					<span style="color:var(--text-xdim); margin: 0 10px;">↔</span>
+					<span class="cy">Modbus TCP</span>
+					<span style="color:var(--text-xdim); margin: 0 10px;">↔</span>
+					<span class="cr">BMS device</span>
+					<span style="color:var(--text-xdim); margin: 0 10px;">↔</span>
+					<span class="cg">cells + charger</span>
+				</div>
+				<div class="diagram-caption">
+					Your service is the <span class="cp">middle box</span>. It speaks a structured, friendly protocol upward (HTTP/JSON) and a register-level wire protocol downward (Modbus TCP). The rest of the page builds up everything you need to understand the right side.
+				</div>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: MODBUS                                     -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-modbus">
+
+		<div class="section">
+			<h2>One master, many slaves</h2>
+
+			<p>Modbus is a <strong>request/response</strong> protocol with a strict role split. One side initiates (historically called the "master", now usually "client") and the other side only responds when asked (the "slave" or "server"). The device in your task is the <strong>slave</strong>. Your service is the <strong>master</strong>.</p>
+
+			<p>This has a concrete consequence: <strong>the BMS cannot push data to you</strong>. It will not notify you when a voltage changes or a fault occurs. If you want to know the cell voltage, you ask. If you want to know it again, you ask again. This is why the task says "periodically poll" — there is no other option.</p>
+		</div>
+
+		<div class="section">
+			<h2>The four operations you'll actually use</h2>
+
+			<p>Modbus defines a small set of <strong>function codes</strong> — one-byte opcodes that name an operation. There are around two dozen total but most devices only implement a handful. For this task you'll use four:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>FC</th>
+						<th>Name</th>
+						<th>What it does</th>
+						<th>You use it for</th>
+					</tr>
+					<tr>
+						<td><code>0x04</code></td>
+						<td>Read Input Registers</td>
+						<td>Read N read-only 16-bit registers starting at an address</td>
+						<td>Cell voltages, pack current</td>
+					</tr>
+					<tr>
+						<td><code>0x03</code></td>
+						<td>Read Holding Registers</td>
+						<td>Read N read-write 16-bit registers starting at an address</td>
+						<td>Read back current charger state or bypass settings</td>
+					</tr>
+					<tr>
+						<td><code>0x06</code></td>
+						<td>Write Single Register</td>
+						<td>Write one 16-bit value to one holding register</td>
+						<td>Toggle the charger, set one bypass resistor</td>
+					</tr>
+					<tr>
+						<td><code>0x10</code></td>
+						<td>Write Multiple Registers</td>
+						<td>Write N consecutive 16-bit values</td>
+						<td>Set both bypass resistors in one round-trip</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>You won't construct these bytes by hand — a Go Modbus library will do it. But knowing which function code maps to which operation makes library docs read clearly, and it explains why the register types matter (next tab).</p>
+		</div>
+
+		<div class="section">
+			<h2>On the wire: one round-trip</h2>
+
+			<p>The Modbus TCP frame has two parts: an <strong class="cy">MBAP header</strong> (Modbus Application Protocol header — the TCP-specific envelope) followed by a <strong class="cb">PDU</strong> (Protocol Data Unit — the actual Modbus operation, same shape as on serial Modbus). Here's a real request + response for reading the two cell voltages.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">request — read cell 1 &amp; cell 2 voltages</div>
+
+				<div style="overflow-x: auto;">
+					<div class="frame">
+						<div class="fcell mbap">
+							<div class="fc-label">Txn ID</div>
+							<div class="fc-val">00 01</div>
+							<div class="fc-sz">2 bytes</div>
+						</div>
+						<div class="fcell mbap">
+							<div class="fc-label">Proto</div>
+							<div class="fc-val">00 00</div>
+							<div class="fc-sz">2 bytes</div>
+						</div>
+						<div class="fcell mbap">
+							<div class="fc-label">Length</div>
+							<div class="fc-val">00 06</div>
+							<div class="fc-sz">2 bytes</div>
+						</div>
+						<div class="fcell mbap">
+							<div class="fc-label">Unit</div>
+							<div class="fc-val">01</div>
+							<div class="fc-sz">1 byte</div>
+						</div>
+						<div class="fcell pdu">
+							<div class="fc-label">FC</div>
+							<div class="fc-val">04</div>
+							<div class="fc-sz">1 byte</div>
+						</div>
+						<div class="fcell pdu">
+							<div class="fc-label">Start addr</div>
+							<div class="fc-val">00 01</div>
+							<div class="fc-sz">2 bytes</div>
+						</div>
+						<div class="fcell pdu">
+							<div class="fc-label">Quantity</div>
+							<div class="fc-val">00 02</div>
+							<div class="fc-sz">2 bytes</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="frame-legend">
+					<span><span class="legend-swatch" style="background:rgba(232,184,52,0.5);"></span>MBAP header (TCP wrapper)</span>
+					<span><span class="legend-swatch" style="background:rgba(61,155,232,0.5);"></span>PDU (the actual Modbus request)</span>
+				</div>
+
+				<div class="diagram-caption">
+					<strong>Txn ID</strong> — client-chosen, the server echoes it; lets you match responses to requests on a multiplexed connection.
+					<strong>Proto</strong> — always <code>0x0000</code> for Modbus.
+					<strong>Length</strong> — bytes following this field (Unit + PDU = 6).
+					<strong>Unit</strong> — slave address; on TCP often <code>0x01</code> or <code>0xFF</code>, a legacy holdover from serial buses with multiple slaves on one wire.
+					<strong>FC <code>0x04</code></strong> — "Read Input Registers."
+					<strong>Start addr <code>0x0001</code></strong> — first register to read.
+					<strong>Quantity <code>0x0002</code></strong> — read two consecutive registers.
+				</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">response — two register values, big-endian</div>
+
+				<div style="overflow-x: auto;">
+					<div class="frame">
+						<div class="fcell mbap">
+							<div class="fc-label">Txn ID</div>
+							<div class="fc-val">00 01</div>
+							<div class="fc-sz">echoed</div>
+						</div>
+						<div class="fcell mbap">
+							<div class="fc-label">Proto</div>
+							<div class="fc-val">00 00</div>
+							<div class="fc-sz">2 bytes</div>
+						</div>
+						<div class="fcell mbap">
+							<div class="fc-label">Length</div>
+							<div class="fc-val">00 07</div>
+							<div class="fc-sz">2 bytes</div>
+						</div>
+						<div class="fcell mbap">
+							<div class="fc-label">Unit</div>
+							<div class="fc-val">01</div>
+							<div class="fc-sz">1 byte</div>
+						</div>
+						<div class="fcell pdu">
+							<div class="fc-label">FC</div>
+							<div class="fc-val">04</div>
+							<div class="fc-sz">1 byte</div>
+						</div>
+						<div class="fcell pdu">
+							<div class="fc-label">Byte cnt</div>
+							<div class="fc-val">04</div>
+							<div class="fc-sz">1 byte</div>
+						</div>
+						<div class="fcell data">
+							<div class="fc-label">Reg 0x0001</div>
+							<div class="fc-val">0F A0</div>
+							<div class="fc-sz">= 4000</div>
+						</div>
+						<div class="fcell data">
+							<div class="fc-label">Reg 0x0002</div>
+							<div class="fc-val">0F 9C</div>
+							<div class="fc-sz">= 3996</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					Cell 1 = <code>0x0FA0</code> = 4000 mV. Cell 2 = <code>0x0F9C</code> = 3996 mV. Modbus is <strong>big-endian</strong>: the high byte of each 16-bit register comes first on the wire.
+				</div>
+			</div>
+
+			<div class="callout">
+				That's the whole protocol in one round-trip. Every other operation is a variation: different FC, different layout after the FC byte, same envelope. If an error occurs (bad address, unsupported FC), the server replies with FC | <code>0x80</code> and a one-byte exception code — your library will turn that into an error return.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>What this gives you</h2>
+
+			<p>You now know enough to read library documentation. A Go Modbus client API looks roughly like <code>client.ReadInputRegisters(addr, qty)</code> returning a byte slice (two bytes per register, big-endian), and <code>client.WriteSingleRegister(addr, value)</code> for control. The function codes are usually hidden behind named methods; the addresses and quantities map directly onto the table in your task.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: REGISTER TYPES                             -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-registers">
+
+		<div class="section">
+			<h2>Four data types, two axes</h2>
+
+			<p>Modbus exposes a device's state as four parallel arrays. They differ along two axes: <strong>bit-width</strong> (single-bit flag vs 16-bit value) and <strong>direction</strong> (read-only vs read-write).</p>
+
+			<div class="reg-grid">
+				<div class="reg-card">
+					<div class="rc-name">Discrete Inputs</div>
+					<div class="rc-tag">1-bit · read-only</div>
+					<div class="rc-desc">Boolean sensors the device exposes: limit switches, presence detectors, fault flags. You read; the device's firmware writes.</div>
+					<div class="rc-stamp not-in-task">not in this task</div>
+				</div>
+				<div class="reg-card">
+					<div class="rc-name">Coils</div>
+					<div class="rc-tag">1-bit · read-write</div>
+					<div class="rc-desc">Boolean actuators: relays, indicator LEDs, on/off commands. You can read the current state or flip them.</div>
+					<div class="rc-stamp not-in-task">not in this task</div>
+				</div>
+				<div class="reg-card used">
+					<div class="rc-name">Input Registers</div>
+					<div class="rc-tag">16-bit · read-only</div>
+					<div class="rc-desc">Numerical sensor readings: voltages, currents, temperatures. Device firmware writes them; you only read.</div>
+					<div class="rc-stamp in-task">cell V, pack I</div>
+				</div>
+				<div class="reg-card used">
+					<div class="rc-name">Holding Registers</div>
+					<div class="rc-tag">16-bit · read-write</div>
+					<div class="rc-desc">Configuration and setpoints: thresholds, modes, control values. You write; the device acts on the new value.</div>
+					<div class="rc-stamp in-task">charger, bypass</div>
+				</div>
+			</div>
+
+			<p>Your assignment only uses the two 16-bit types. The split is the important part: <strong>input vs holding tells you who owns the truth</strong>.</p>
+		</div>
+
+		<div class="section">
+			<h2>Why the read-only / read-write split matters</h2>
+
+			<p>If a register is an <strong>input</strong> register, the device is saying "this is a measurement — only I should write it." Your job is to sample it. Writing makes no sense and isn't even an available operation.</p>
+
+			<p>If a register is a <strong>holding</strong> register, the device is saying "this is a setting — you can change it, and the value sticks until you change it again." The device may use the value internally to alter behavior (e.g. when <code>0x0010</code> goes from 0 to non-zero, the charger turns on).</p>
+
+			<p>This split also implies <strong>two different control loops</strong> in your service:</p>
+
+			<ul style="margin: 10px 0 14px 22px;">
+				<li>A <strong>read loop</strong> against input registers, on a fixed interval — pure measurement.</li>
+				<li>A <strong>write path</strong> against holding registers, triggered by either (a) the controller deciding to change something, or (b) a manual override coming in via the HTTP API.</li>
+			</ul>
+
+			<p>You'll also occasionally <em>read</em> holding registers — to know what you previously wrote (after a restart, for instance, or to surface "current settings" in the API).</p>
+		</div>
+
+		<div class="section">
+			<h2>The address space</h2>
+
+			<p>Each register type has its own address space numbered from 0 to 65535. So address <code>0x0001</code> in input registers is a <em>different</em> register than <code>0x0001</code> in holding registers — they don't overlap. The function code disambiguates them: FC <code>0x04</code> reads from the input-register space, FC <code>0x03</code> reads from the holding-register space.</p>
+
+			<p>This is why your task's map is unambiguous even though <code>0x0001</code> and <code>0x0011</code> are in the same numeric range — the "Type" column tells you which space each address lives in.</p>
+
+			<div class="callout warn">
+				<strong>Historical wart:</strong> older Modbus literature uses 5-digit "logical" addresses where the first digit encodes the type (<code>1xxxx</code> = discrete inputs, <code>3xxxx</code> = input registers, <code>4xxxx</code> = holding registers) and the rest is the 1-based address. Modern libraries use the raw 0-based address plus an explicit function code, which is what your task's map shows. If you see <code>30001</code> in some doc, it means input register at raw address 0.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Values are uninterpreted 16-bit words</h2>
+
+			<p>A register is just two bytes. The protocol has no concept of "this register holds millivolts" or "this one is signed." That interpretation is entirely defined by the device's register map document — exactly what the table in your assignment is. Specifically:</p>
+
+			<ul style="margin: 10px 0 14px 22px;">
+				<li><code>0x0001</code> and <code>0x0002</code> hold cell voltages in <strong>mV</strong> as unsigned 16-bit. Range <code>0</code>–<code>65535</code> mV.</li>
+				<li><code>0x0003</code> holds pack current in <strong>mA</strong> as <strong>signed</strong> int16. The same bytes that would read as 65000 unsigned read as −536 signed — your code must apply the right interpretation.</li>
+				<li><code>0x0010</code>, <code>0x0011</code>, <code>0x0012</code> are RW with unit "—". The map gives no semantics for the value; you'll need to decide on a convention (or ask) — likely 0/non-zero for the charger enable, and either a binary on/off or a level/duty-cycle for the bypass resistors.</li>
+			</ul>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE BMS                                    -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-bms">
+
+		<div class="section">
+			<h2>What a BMS is for</h2>
+
+			<p>A lithium-ion cell is a chemistry that delivers a lot of energy per gram, but with narrow safety margins. Charge it above ~4.2 V and it can damage itself or catch fire. Discharge it below ~2.5 V and it permanently loses capacity. Run too much current through it and it overheats. A <strong>Battery Management System</strong> is the dedicated electronics that keep a battery inside its safe operating envelope — monitoring voltages, currents, temperatures, and gating the charger and load.</p>
+
+			<p>In your task, the BMS is already doing the hard low-level work (the safety cutoffs and sensor reads). Your service is the <strong>higher-level policy layer</strong>: deciding when to charge, and how to keep the two cells matched. The BMS exposes its measurements as input registers and its knobs as holding registers; you read, decide, write.</p>
+		</div>
+
+		<div class="section">
+			<h2>Two cells in series</h2>
+
+			<p>The device has two lithium cells wired in series. "In series" means the negative terminal of cell 1 connects to the positive terminal of cell 2, so their voltages add up at the pack terminals.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">pack topology</div>
+				<div class="cell-stack">
+					<div class="pack-terminal top">+ pack terminal — ~ V_cell1 + V_cell2</div>
+					<div class="wire-v"></div>
+					<div class="cell-block c1">
+						<div class="cb-name">Cell 1 (register 0x0001)</div>
+						<div class="cb-v">4.00 V</div>
+					</div>
+					<div class="wire-v"></div>
+					<div class="cell-block c2">
+						<div class="cb-name">Cell 2 (register 0x0002)</div>
+						<div class="cb-v">3.99 V</div>
+					</div>
+					<div class="wire-v"></div>
+					<div class="pack-terminal bot">− pack terminal</div>
+				</div>
+				<div class="diagram-caption">
+					Two Li-ion cells stacked. The BMS measures each cell individually (because you must monitor each to keep it in safe range), but they share the same current — whatever current flows through cell 1 also flows through cell 2. That shared-current fact is the source of the balancing problem.
+				</div>
+			</div>
+
+			<p>Why series? To get usable voltage. One Li-ion cell sits around 3.0–4.2 V depending on state of charge. Two in series gives you a 6.0–8.4 V pack. Devices that need more voltage stack more cells.</p>
+		</div>
+
+		<div class="section">
+			<h2>Signed pack current</h2>
+
+			<p>The pack-current register (<code>0x0003</code>) is signed for one reason: <strong>current flows in both directions</strong>. When the charger pushes energy in, current flows one way; when something draws from the battery, it flows the other way. The sign tells you which.</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Sign convention (commonly)</th>
+						<th>Meaning</th>
+						<th>What it tells your controller</th>
+					</tr>
+					<tr>
+						<td>Positive current</td>
+						<td>Charging (energy in)</td>
+						<td>Charger is doing work, cells filling</td>
+					</tr>
+					<tr>
+						<td>Negative current</td>
+						<td>Discharging (energy out)</td>
+						<td>Load is drawing from battery</td>
+					</tr>
+					<tr>
+						<td>Zero / near zero</td>
+						<td>Idle</td>
+						<td>Charger off and no load</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>The convention can vary by device — some flip the sign. Verify against actual behavior (enable the charger, see whether the value goes positive or negative). For your code, the practical step is to convert the raw <code>uint16</code> to <code>int16</code> when decoding:</p>
+
+			<div class="codeblock">// raw is the 16-bit register value (uint16) returned by the Modbus library.
+// In Go, an explicit conversion through int16 gives you the signed interpretation:
+current_mA := int16(raw)
+</div>
+		</div>
+
+		<div class="section">
+			<h2>"Mostly full" — what that constraint means</h2>
+
+			<p>The task says "keep the backup battery mostly full." This is a deliberate phrasing, not "always full," and the distinction matters:</p>
+
+			<ul style="margin: 10px 0 14px 22px;">
+				<li>A backup battery needs to be <strong>ready</strong>. If grid power dies, you want enough charge to be useful. Empty backups are useless.</li>
+				<li>But holding a Li-ion cell at <strong>100% indefinitely accelerates aging</strong> — the chemistry is happiest sitting somewhere in the upper-middle of its range.</li>
+				<li>So the right policy is a <strong>band</strong>, not a setpoint. Charge until cells reach an upper threshold (say ~4.1 V), then disable the charger. Let the pack drift down via self-discharge to a lower threshold (say ~3.95 V), then enable again.</li>
+			</ul>
+
+			<p>This hysteresis pattern — two thresholds with a gap between them — prevents the charger from rapidly toggling on and off around a single setpoint, which would happen if the cell voltage hovered near the boundary. You'll write to <code>0x0010</code> (charger enable) when the upper or lower threshold is crossed, not every poll cycle.</p>
+
+			<div class="callout">
+				<strong>What "full" actually looks like in voltage:</strong> a single Li-ion cell is roughly 3.0 V (empty), 3.7 V (nominal/mid), 4.2 V (full). The relationship is non-linear — voltage stays near 3.7 V for most of the discharge then drops fast at the ends — but for your task, voltage thresholds are a fine proxy for state of charge. Pick a "stop charging" threshold below 4.2 V to leave margin.
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: BALANCING                                  -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-balance">
+
+		<div class="section">
+			<h2>Why two "identical" cells drift apart</h2>
+
+			<p>No two cells are truly identical. They come off the production line with slightly different internal resistance, capacity, and self-discharge rate. Over many charge/discharge cycles those small differences compound. After enough cycles, with the same current flowing through both, one cell ends up consistently fuller than the other.</p>
+
+			<p>This matters because of a hard constraint: <strong>the charger has to stop when the fullest cell reaches its limit</strong>, not when the average is at its limit. If cell 1 hits 4.2 V while cell 2 is still at 4.0 V, charging must stop — even though cell 2 isn't full yet. The imbalance directly costs usable capacity.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">the imbalance problem</div>
+				<div style="font-family: var(--mono); font-size: 12px; padding: 6px 0; line-height: 1.9;">
+					<div style="margin-bottom: 14px;">
+						<span style="color: var(--text-dim);">without balancing, charging stops here:</span><br>
+						<span class="cr">cell 1: ████████████████████ 4.20 V (full — limit reached)</span><br>
+						<span class="cb">cell 2: ███████████████░░░░░ 4.00 V (not full — wasted headroom)</span>
+					</div>
+					<div>
+						<span style="color: var(--text-dim);">with balancing, both fill together:</span><br>
+						<span class="cr">cell 1: ████████████████████ 4.20 V</span><br>
+						<span class="cb">cell 2: ████████████████████ 4.20 V</span>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The bypass resistor — physics-light</h2>
+
+			<p>A <strong>bypass resistor</strong> is a resistor wired in parallel with one cell, with a switch the BMS can close. When the switch is closed, the resistor offers an alternate path for current around that cell.</p>
+
+			<p>The effect: the fuller cell can be made to <strong>discharge slightly</strong> through its resistor while charging continues. Some of the charge current "bypasses" the full cell (flowing through the resistor instead) while the lower cell keeps receiving full current. Over many cycles, this nudges the two cells back toward matching voltages.</p>
+
+			<div class="callout">
+				<strong>The whole mental model:</strong> the bypass resistor is a controlled bleed valve for one specific cell. Turning it on means "make this cell drop relative to its sibling." Your service decides when each cell's bleed should be on or off based on the voltage difference between them.
+			</div>
+
+			<p>This is called <strong>passive balancing</strong> — passive because the bled energy turns into heat in the resistor (it's not recycled). The balancing currents are small (tens of mA, much less than charge current), so the heat is manageable and the balancing is slow. That slowness is fine: you have hours of charge time to even out cells that differ by tens of millivolts.</p>
+		</div>
+
+		<div class="section">
+			<h2>The control rule, in words</h2>
+
+			<p>Translating that into what your service does each cycle:</p>
+
+			<div class="codeblock">read cell1_mV, cell2_mV
+diff = cell1_mV - cell2_mV
+
+if diff > THRESHOLD:        // cell 1 is fuller
+    bypass cell 1 ON
+    bypass cell 2 OFF
+else if diff < -THRESHOLD:  // cell 2 is fuller
+    bypass cell 1 OFF
+    bypass cell 2 ON
+else:                       // close enough
+    bypass cell 1 OFF
+    bypass cell 2 OFF
+</div>
+
+			<p>The threshold prevents constant toggling around tiny differences. Picking a reasonable value (e.g. 20–50 mV) is part of the policy you design.</p>
+
+			<p>What value to <em>write</em> for "ON" depends on what <code>0x0011</code> / <code>0x0012</code> actually accept. The map labels them as RW holding registers with no unit. The two plausible options:</p>
+
+			<ul style="margin: 10px 0 14px 22px;">
+				<li><strong>Binary:</strong> <code>0</code> = off, <code>1</code> (or any non-zero) = on. Simplest case.</li>
+				<li><strong>Level / duty cycle:</strong> <code>0</code> = off, larger values = more bleed (e.g. PWM duty cycle 0–100, or 0–65535). Lets you balance more aggressively when cells are far apart.</li>
+			</ul>
+
+			<p>If the task spec doesn't specify, this is a question worth asking the assignment author — but in absence of clarification, treating it as binary (write 0 or 1) is the safer default since it works in either interpretation.</p>
+		</div>
+
+		<div class="section">
+			<h2>Balancing only matters when current is flowing</h2>
+
+			<p>One subtlety: balancing via bleed is most effective <em>during charging</em>, when charge current is replenishing the cells. If both cells are idle (no charge, no load), enabling a bypass just wastes energy from the bled cell — you're discharging it into the resistor while nothing is filling it back up.</p>
+
+			<p>So a more careful control rule gates the bleeds on whether the charger is on, or on the sign of pack current. The simple rule above will work and won't damage anything; this is just an optimization opportunity worth mentioning in the design.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: YOUR MAP & POLLING                         -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-apply">
+
+		<div class="section">
+			<h2>The map, row by row</h2>
+
+			<p>Now that the vocabulary is in place, the task's register table reads as a list of concrete operations.</p>
+
+			<div class="map-row">
+				<div class="map-head">
+					<span class="mh-addr">0x0001</span>
+					<span class="mh-type">Input register · mV</span>
+					<span class="mh-rw">READ</span>
+					<span class="mh-desc">Cell 1 voltage</span>
+				</div>
+				<div class="map-body">
+					<p>Unsigned 16-bit, millivolts. Range 0–65535 mV (a healthy Li-ion cell sits in 3000–4200 mV). Read with FC <code>0x04</code> alongside <code>0x0002</code> in a single 2-register read.</p>
+				</div>
+			</div>
+
+			<div class="map-row">
+				<div class="map-head">
+					<span class="mh-addr">0x0002</span>
+					<span class="mh-type">Input register · mV</span>
+					<span class="mh-rw">READ</span>
+					<span class="mh-desc">Cell 2 voltage</span>
+				</div>
+				<div class="map-body">
+					<p>Same encoding as cell 1. The two cell-voltage registers are consecutive — efficient to read together.</p>
+				</div>
+			</div>
+
+			<div class="map-row">
+				<div class="map-head">
+					<span class="mh-addr">0x0003</span>
+					<span class="mh-type">Input register · mA · signed</span>
+					<span class="mh-rw">READ</span>
+					<span class="mh-desc">Pack current</span>
+				</div>
+				<div class="map-body">
+					<p>Signed 16-bit, milliamps. Range −32768 to +32767 mA. The sign tells you whether the pack is charging or discharging. Decode with an explicit <code>int16</code> conversion. Since this lives right after <code>0x0002</code>, you can read all three input registers in one 3-register call to FC <code>0x04</code>.</p>
+				</div>
+			</div>
+
+			<div class="map-row">
+				<div class="map-head">
+					<span class="mh-addr">0x0010</span>
+					<span class="mh-type">Holding register</span>
+					<span class="mh-rw">READ / WRITE</span>
+					<span class="mh-desc">Charger enable</span>
+				</div>
+				<div class="map-body">
+					<p>Write <code>0</code> to disable the charger, non-zero to enable it. Toggled by your policy: enable when pack voltage falls below the lower threshold, disable when it crosses the upper threshold (or earlier if any cell hits its individual limit). Write with FC <code>0x06</code>.</p>
+				</div>
+			</div>
+
+			<div class="map-row">
+				<div class="map-head">
+					<span class="mh-addr">0x0011</span>
+					<span class="mh-type">Holding register</span>
+					<span class="mh-rw">READ / WRITE</span>
+					<span class="mh-desc">Cell 1 bypass resistor</span>
+				</div>
+				<div class="map-body">
+					<p>Drives the bleed across cell 1. Treat as 0 = off, non-zero = on unless the device spec says otherwise. Set by your balancing logic: enable when cell 1 is meaningfully fuller than cell 2.</p>
+				</div>
+			</div>
+
+			<div class="map-row">
+				<div class="map-head">
+					<span class="mh-addr">0x0012</span>
+					<span class="mh-type">Holding register</span>
+					<span class="mh-rw">READ / WRITE</span>
+					<span class="mh-desc">Cell 2 bypass resistor</span>
+				</div>
+				<div class="map-body">
+					<p>Same as <code>0x0011</code> but for cell 2. The two are consecutive — you can update both in one FC <code>0x10</code> write if you want atomic balancing changes, or write each individually with FC <code>0x06</code>.</p>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Periodic polling — the shape</h2>
+
+			<p>Because Modbus is request/response with no server-side push, the only way to track the device's state over time is to ask repeatedly on a timer. "Periodic polling" is the loop that does this.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">poll cycle</div>
+				<div class="flow-vert">
+					<div class="flow-step">
+						<div class="fs-tag">tick</div>
+						timer fires every N seconds
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<div class="fs-tag">read</div>
+						FC 0x04 — read input registers 0x0001..0x0003
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<div class="fs-tag">decode</div>
+						cell1_mV, cell2_mV (uint16) · current_mA (int16)
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<div class="fs-tag">persist</div>
+						append reading (with timestamp) to storage
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<div class="fs-tag">decide</div>
+						run charger policy + balancing policy
+					</div>
+					<div class="flow-arrow">↓</div>
+					<div class="flow-step">
+						<div class="fs-tag">write (if needed)</div>
+						FC 0x06 / 0x10 — only when a setting needs to change
+					</div>
+				</div>
+				<div class="diagram-caption">
+					The interval is a tradeoff: too fast wastes CPU and floods storage; too slow misses fast events (a sudden discharge). Cell voltages change on the order of minutes during charging — a poll every 1–5 seconds is typically plenty for a backup system. The interval is a config value, not a constant.
+				</div>
+			</div>
+
+			<p>A few practical notes about the loop:</p>
+
+			<ul style="margin: 10px 0 14px 22px;">
+				<li><strong>Read in batches.</strong> A single <code>ReadInputRegisters(0x0001, 3)</code> fetches all three sensor values in one round-trip. Don't issue three separate reads — each costs a TCP round-trip and is a chance for inconsistency between readings taken milliseconds apart.</li>
+				<li><strong>Only write when something changes.</strong> Don't blindly write the charger-enable register every cycle; that's network chatter and unnecessary wear. Track the last-written value and write only on transition. (Reading back the holding register after a restart is how you recover state.)</li>
+				<li><strong>Handle errors as transient.</strong> Modbus TCP runs over a long-lived connection that can drop. Failed reads should retry; persistent failures should be surfaced as state in your HTTP API ("device unreachable") rather than crashing the loop.</li>
+				<li><strong>Manual overrides need to be honored.</strong> If the HTTP API exposes "force charger off," your control loop must respect that flag and not immediately re-enable on the next tick. A simple pattern: the override is itself a piece of state the policy reads.</li>
+			</ul>
+		</div>
+
+		<div class="section">
+			<h2>The service, in one picture</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">overall architecture</div>
+				<div style="font-family:var(--mono); font-size:12px; line-height: 2.1; padding: 6px 0;">
+					<div style="color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">downward — to the device</div>
+					<span class="cp">poll loop (goroutine)</span>
+					<span style="color: var(--text-xdim); margin: 0 6px;">→</span>
+					<span class="cy">Modbus client</span>
+					<span style="color: var(--text-xdim); margin: 0 6px;">→</span>
+					<span class="cr">BMS</span>
+					<br>
+					<span class="cp">poll loop</span>
+					<span style="color: var(--text-xdim); margin: 0 6px;">→</span>
+					<span class="cg">readings store (DB / in-memory ring)</span>
+					<br>
+					<span class="cp">poll loop</span>
+					<span style="color: var(--text-xdim); margin: 0 6px;">→</span>
+					<span class="cp">policy</span>
+					<span style="color: var(--text-xdim); margin: 0 6px;">→</span>
+					<span class="cy">Modbus client (writes)</span>
+
+					<div style="color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin: 18px 0 12px;">upward — to clients</div>
+					<span class="cb">HTTP handler</span>
+					<span style="color: var(--text-xdim); margin: 0 6px;">→</span>
+					<span class="cg">readings store</span>
+					<span style="color: var(--text-xdim); margin: 0 6px;">(GET state / history)</span>
+					<br>
+					<span class="cb">HTTP handler</span>
+					<span style="color: var(--text-xdim); margin: 0 6px;">→</span>
+					<span class="cp">override flags</span>
+					<span style="color: var(--text-xdim); margin: 0 6px;">→</span>
+					<span class="cp">policy</span>
+					<span style="color: var(--text-xdim); margin: 0 6px;">(POST manual command)</span>
+				</div>
+				<div class="diagram-caption">
+					The poll loop and the HTTP handlers are independent goroutines sharing two pieces of state: the readings store (handlers read it, the loop writes it) and the override flags (handlers write them, the policy reads them). Both directions are concurrency-safe primitives — channels, a mutex-wrapped struct, or an in-memory store with its own locking.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Cheat sheet</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Operation</th>
+						<th>Function code</th>
+						<th>Addresses</th>
+						<th>Frequency</th>
+					</tr>
+					<tr>
+						<td>Read all sensors</td>
+						<td><code>0x04</code> · ReadInputRegisters</td>
+						<td><code>0x0001</code>, qty 3</td>
+						<td>Every tick (1–5 s)</td>
+					</tr>
+					<tr>
+						<td>Toggle charger</td>
+						<td><code>0x06</code> · WriteSingleRegister</td>
+						<td><code>0x0010</code></td>
+						<td>On threshold crossing</td>
+					</tr>
+					<tr>
+						<td>Set one bypass</td>
+						<td><code>0x06</code> · WriteSingleRegister</td>
+						<td><code>0x0011</code> or <code>0x0012</code></td>
+						<td>On imbalance state change</td>
+					</tr>
+					<tr>
+						<td>Set both bypasses atomically</td>
+						<td><code>0x10</code> · WriteMultipleRegisters</td>
+						<td><code>0x0011</code>, qty 2</td>
+						<td>On imbalance state change</td>
+					</tr>
+					<tr>
+						<td>Read current settings (recovery)</td>
+						<td><code>0x03</code> · ReadHoldingRegisters</td>
+						<td><code>0x0010</code>, qty 3</td>
+						<td>On startup</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+	</div>
+
+</div>
+
+<script>
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
