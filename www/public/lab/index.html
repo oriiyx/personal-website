@@ -492,6 +492,20 @@
             "bulk transfer across wrap",
             "SPSC lock-free rings"
           ]
+        },
+        {
+          slug: "modbus-tcp",
+          title: "modbus + tcp from first principles",
+          subtitle: "how a serial protocol learned to ride a byte stream — port 502, the handshake, MBAP framing, and what TCP gave Modbus for free",
+          description: "Companion to the Modbus/BMS page focused on the TCP side of the stack: TCP as a reliable byte stream, the three-way handshake visualised as a sequence diagram, the stream-vs-message framing problem and how the MBAP Length field solves it, a full end-to-end polling cycle (handshake → request → response → close) with every layer's role spelled out, and practical gotchas (port 502, connection limits, Txn ID multiplexing, Nagle/delayed-ACK stalls, reconnection strategy, debugging triage).",
+          topics: ["modbus", "modbus-tcp", "tcp", "networking", "industrial-protocols", "message-framing", "protocol-design"]
+        },
+        {
+          slug: "modbus-bms",
+          title: "modbus + BMS from first principles",
+          subtitle: "a backup battery, a Modbus TCP slave, and a register map — decoded",
+          description: "Domain and protocol prep for an IoT backend assignment: Modbus TCP (master/slave, function codes, MBAP+PDU wire format), the four register types and why the read-only/read-write split matters, lithium cells in series, signed pack current, the 'mostly full' policy band, passive balancing via bypass resistors, and a row-by-row decode of a real BMS register map with the periodic-polling loop that drives it.",
+          topics: ["modbus", "modbus-tcp", "iot", "bms", "lithium-ion", "battery-management", "industrial-protocols", "periodic-polling"]
         }
 	];
 	// ────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Modbus + TCP — From First Principles</title>
+	<link
+		href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+		rel="stylesheet">
+	<style>
+      :root {
+          --bg: #0b0d11;
+          --surface: #11141b;
+          --surface2: #171b25;
+          --surface3: #1d2230;
+          --border: #232838;
+          --border-hi: #2f3650;
+          --text: #c8cee0;
+          --text-b: #e2e6f0;
+          --text-dim: #5c6380;
+          --text-xdim: #3b4058;
+          --mono: 'JetBrains Mono', monospace;
+          --serif: 'Source Serif 4', Georgia, serif;
+          --byte0: #f06565;
+          --byte1: #4dc462;
+          --byte2: #3d9be8;
+          --c0: #f06565;
+          --c1: #e8b834;
+          --c2: #4dc462;
+          --c3: #3d9be8;
+          --accent: #7c5ce0;
+          --accent2: #c084fc;
+          --warn: #e8883a;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--serif);
+          font-size: 16px;
+          line-height: 1.72;
+          min-height: 100vh;
+      }
+
+      .page { max-width: 1080px; margin: 0 auto; padding: 48px 24px 100px; }
+
+      .page-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+      .page-header h1 {
+          font-family: var(--mono);
+          font-size: 26px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -1px;
+          margin-bottom: 6px;
+      }
+      .page-header .sub {
+          font-family: var(--mono);
+          font-size: 12px;
+          color: var(--text-dim);
+          letter-spacing: 0.5px;
+      }
+
+      .tab-bar {
+          display: flex;
+          gap: 2px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 4px;
+          margin-bottom: 36px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          justify-content: center;
+      }
+
+      .tab-btn {
+          font-family: var(--mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.3px;
+          padding: 8px 16px;
+          border: none;
+          border-radius: 7px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--text-dim);
+          transition: all 0.15s;
+          white-space: nowrap;
+          flex-shrink: 0;
+      }
+      .tab-btn:hover { color: var(--text); background: var(--surface2); }
+      .tab-btn.active { color: #fff; background: var(--accent); }
+
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; animation: fadeIn 0.2s ease; }
+
+      @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+
+      .section { margin-bottom: 40px; }
+      .section h2 {
+          font-family: var(--mono);
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--text-b);
+          letter-spacing: -0.3px;
+          margin-bottom: 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
+      }
+      .section p { margin-bottom: 14px; }
+      .section p:last-child { margin-bottom: 0; }
+
+      strong { color: var(--text-b); font-weight: 600; }
+
+      code {
+          font-family: var(--mono);
+          font-size: 0.88em;
+          background: var(--surface2);
+          padding: 2px 7px;
+          border-radius: 4px;
+          color: var(--accent2);
+      }
+
+      .diagram {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 24px;
+          margin: 20px 0;
+          overflow-x: auto;
+      }
+
+      .diagram-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--text-dim);
+          margin-bottom: 16px;
+      }
+
+      .diagram-caption {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 14px;
+          line-height: 1.6;
+      }
+
+      .codeblock {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 18px 20px;
+          margin: 16px 0;
+          font-family: var(--mono);
+          font-size: 12px;
+          line-height: 1.7;
+          overflow-x: auto;
+          color: var(--text);
+          white-space: pre;
+      }
+
+      .callout {
+          background: rgba(124, 92, 224, 0.06);
+          border: 1px solid rgba(124, 92, 224, 0.14);
+          border-radius: 8px;
+          padding: 14px 18px;
+          margin: 16px 0;
+          font-size: 14px;
+          line-height: 1.65;
+      }
+      .callout.warn {
+          background: rgba(232, 136, 58, 0.06);
+          border-color: rgba(232, 136, 58, 0.14);
+      }
+
+      .tbl-wrap { overflow-x: auto; margin: 16px 0; }
+
+      table {
+          border-collapse: collapse;
+          font-family: var(--mono);
+          font-size: 12px;
+          width: 100%;
+      }
+      th {
+          text-align: left;
+          padding: 8px 14px;
+          background: var(--surface2);
+          color: var(--text-dim);
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-bottom: 1px solid var(--border);
+      }
+      td { padding: 8px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+      tr:last-child td { border-bottom: none; }
+
+      .cr { color: var(--byte0); }
+      .cg { color: var(--byte1); }
+      .cb { color: var(--byte2); }
+      .cy { color: var(--c1); }
+      .cp { color: var(--accent2); }
+
+      /* ── Wire-frame cells (re-used from prior Modbus page) ── */
+      .frame {
+          display: flex;
+          gap: 4px;
+          padding: 14px 0;
+          min-width: max-content;
+      }
+      .fcell {
+          padding: 10px 12px;
+          border-radius: 6px;
+          text-align: center;
+          min-width: 70px;
+      }
+      .fcell.tcp { background: rgba(192, 132, 252, 0.08); border: 1px solid rgba(192, 132, 252, 0.22); }
+      .fcell.mbap { background: rgba(232, 184, 52, 0.07); border: 1px solid rgba(232, 184, 52, 0.22); }
+      .fcell.pdu { background: rgba(61, 155, 232, 0.07); border: 1px solid rgba(61, 155, 232, 0.22); }
+      .fcell.payload { background: rgba(77, 196, 98, 0.07); border: 1px solid rgba(77, 196, 98, 0.22); }
+      .fc-label {
+          font-family: var(--mono);
+          font-size: 9px;
+          color: var(--text-dim);
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+          margin-bottom: 4px;
+      }
+      .fc-val {
+          font-family: var(--mono);
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-b);
+      }
+      .fc-sz {
+          font-family: var(--mono);
+          font-size: 9px;
+          color: var(--text-xdim);
+          margin-top: 4px;
+      }
+      .frame-legend {
+          display: flex;
+          gap: 18px;
+          flex-wrap: wrap;
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          margin-top: 10px;
+      }
+      .legend-swatch {
+          display: inline-block;
+          width: 12px;
+          height: 12px;
+          border-radius: 3px;
+          margin-right: 6px;
+          vertical-align: middle;
+      }
+
+      /* ── Layer stack (encapsulation) ── */
+      .stack {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          margin: 14px 0;
+      }
+      .stack-row {
+          display: flex;
+          align-items: stretch;
+      }
+      .stack-label {
+          font-family: var(--mono);
+          font-size: 10px;
+          color: var(--text-dim);
+          width: 110px;
+          flex-shrink: 0;
+          padding: 14px 12px;
+          text-align: right;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+      }
+      .stack-bar {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          padding: 14px 16px;
+          border-radius: 6px;
+          font-family: var(--mono);
+          font-size: 12px;
+          font-weight: 500;
+      }
+      .stack-bar.app { background: rgba(192, 132, 252, 0.07); border: 1px solid rgba(192, 132, 252, 0.18); color: var(--accent2); }
+      .stack-bar.modbus { background: rgba(232, 184, 52, 0.07); border: 1px solid rgba(232, 184, 52, 0.18); color: var(--c1); }
+      .stack-bar.tcp { background: rgba(61, 155, 232, 0.07); border: 1px solid rgba(61, 155, 232, 0.18); color: var(--byte2); }
+      .stack-bar.ip { background: rgba(77, 196, 98, 0.07); border: 1px solid rgba(77, 196, 98, 0.18); color: var(--byte1); }
+      .stack-bar.eth { background: rgba(240, 101, 101, 0.07); border: 1px solid rgba(240, 101, 101, 0.18); color: var(--byte0); }
+
+      /* ── Sequence diagram ── */
+      .seq-svg-wrap {
+          background: var(--surface2);
+          border-radius: 8px;
+          padding: 16px;
+          overflow-x: auto;
+          min-width: 0;
+      }
+      .seq-svg-wrap svg {
+          display: block;
+          margin: 0 auto;
+          min-width: 580px;
+      }
+
+      .scroll-hint { min-width: 580px; }
+
+      @media (max-width: 640px) {
+          .tab-btn { font-size: 10px; padding: 7px 10px; }
+          .stack-label { width: 80px; font-size: 9px; }
+      }
+
+      .back-link {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--text-dim);
+          text-decoration: none;
+          display: inline-block;
+          margin-bottom: 24px;
+          letter-spacing: 0.3px;
+      }
+      .back-link:hover { color: var(--text); }
+	</style>
+</head>
+<body>
+<div class="page">
+
+	<a class="back-link" href="/lab/">← back to lab</a>
+
+	<div class="page-header">
+		<h1>modbus + tcp from first principles</h1>
+		<div class="sub">how a serial protocol learned to ride a byte stream · port 502 · MBAP framing · the handshake · what TCP gave Modbus for free</div>
+	</div>
+
+	<div class="tab-bar" id="tab-bar">
+		<button class="tab-btn active" data-tab="problem">The Problem</button>
+		<button class="tab-btn" data-tab="tcp">TCP Refresher</button>
+		<button class="tab-btn" data-tab="handshake">Handshake</button>
+		<button class="tab-btn" data-tab="framing">Stream → Messages</button>
+		<button class="tab-btn" data-tab="conversation">Full Conversation</button>
+		<button class="tab-btn" data-tab="notes">Notes &amp; Gotchas</button>
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: THE PROBLEM                                -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel active" id="tab-problem">
+
+		<div class="section">
+			<h2>Where Modbus came from</h2>
+
+			<p>Modbus was published by Modicon in <strong>1979</strong>, designed for the world it grew up in: programmable logic controllers connected by short runs of twisted-pair copper, mostly RS-485, mostly point-to-point or short multidrop buses. The whole protocol assumes a <strong>single shared wire</strong> where one master talks and one slave answers, bytes arrive in strict order, and message boundaries are defined by inter-character silence (3.5 character-times of idle time = "frame done").</p>
+
+			<p>On serial, the wire format is small and rigid: one address byte, one function code, the payload, then a 16-bit CRC. The CRC is essential — analog wires pick up noise, voltage spikes corrupt bits, and the only way the master knows a frame was valid is to recompute the CRC and compare.</p>
+		</div>
+
+		<div class="section">
+			<h2>Where Modbus had to go</h2>
+
+			<p>By the late 1990s, every plant had Ethernet. PLCs needed to talk to SCADA workstations across the building, then across the site, then across the internet. The Modbus Organization had two choices: design a new protocol from scratch, or wrap Modbus in TCP/IP and ride the existing networking stack.</p>
+
+			<p>They chose the second. <strong>Modbus TCP</strong> was published in 1999. The bet was that the protocol's <em>application layer</em> — function codes, register addresses, data model — was the part people knew and built devices around. The <em>transport</em> — the serial wire, the CRC, the silence-based framing — was incidental and could be replaced wholesale.</p>
+
+			<p>The result: the inner part of the message (the <strong class="cb">PDU</strong> — function code + data) is byte-for-byte identical between Modbus RTU on RS-485 and Modbus TCP on Ethernet. Only the wrapper around it changes.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">what changed when Modbus moved onto TCP</div>
+				<div class="tbl-wrap">
+					<table>
+						<tr>
+							<th></th>
+							<th>Modbus RTU (serial)</th>
+							<th>Modbus TCP</th>
+						</tr>
+						<tr>
+							<td>Transport</td>
+							<td>RS-485 / RS-232, one shared wire</td>
+							<td>TCP/IP over Ethernet, point-to-point socket</td>
+						</tr>
+						<tr>
+							<td>Addressing</td>
+							<td>1-byte slave address (1–247)</td>
+							<td>IP address + TCP port (502) + 1-byte Unit ID</td>
+						</tr>
+						<tr>
+							<td>Framing</td>
+							<td>Inter-character silence (3.5 char-times)</td>
+							<td>MBAP <code>Length</code> field</td>
+						</tr>
+						<tr>
+							<td>Error check</td>
+							<td>CRC-16 on every frame</td>
+							<td>None at Modbus layer — TCP handles it</td>
+						</tr>
+						<tr>
+							<td>Concurrency</td>
+							<td>One in-flight request per bus</td>
+							<td>Multiple in-flight per connection (Txn ID)</td>
+						</tr>
+						<tr>
+							<td>Multi-master</td>
+							<td>Not allowed (one master per bus)</td>
+							<td>Many clients, each with their own connection</td>
+						</tr>
+						<tr>
+							<td>PDU (function code + data)</td>
+							<td colspan="2" style="text-align:center; color:var(--byte1);"><strong>identical in both</strong></td>
+						</tr>
+					</table>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The real question of this page</h2>
+
+			<p>The Modbus side you already know — function codes, register types, the BMS register map. This page is about the <em>other</em> side of the stack: the TCP that carries it. Three questions are worth answering before any of the wire-format details make sense:</p>
+
+			<ol style="padding-left: 22px; margin-bottom: 0;">
+				<li style="margin-bottom: 8px;"><strong>What does TCP actually give Modbus?</strong> (Reliability, ordering, integrity — and what it pointedly does <em>not</em> give.)</li>
+				<li style="margin-bottom: 8px;"><strong>How does TCP get set up and torn down?</strong> (The three-way handshake, the connection lifecycle, why the spec recommends keeping it open.)</li>
+				<li><strong>How does Modbus extract messages from a TCP byte stream?</strong> (TCP delivers bytes, not messages — the MBAP <code>Length</code> field is the bridge.)</li>
+			</ol>
+		</div>
+
+		<div class="callout">
+			Modbus RTU and Modbus TCP share the same brain (PDU) but completely different bodies (transport, framing, error checking). When you debug a Modbus TCP problem, you need to be clear about which body you're poking at — TCP problems and Modbus-layer problems look similar but live in different places.
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: TCP REFRESHER                              -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-tcp">
+
+		<div class="section">
+			<h2>What TCP is, in one sentence</h2>
+
+			<p>TCP is a protocol that turns the unreliable, packet-switched, possibly-reordering, possibly-dropping IP layer into the illusion of a <strong>reliable, ordered, full-duplex stream of bytes</strong> between two endpoints.</p>
+
+			<p>"Endpoint" means an <code>(IP address, port number)</code> pair. "Stream of bytes" means: you write some bytes in on one end, the same bytes come out the other end, in the same order, eventually, or you get an error.</p>
+		</div>
+
+		<div class="section">
+			<h2>The three guarantees</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">what you get for free, once a TCP connection is open</div>
+				<div class="tbl-wrap">
+					<table>
+						<tr>
+							<th>Guarantee</th>
+							<th>Mechanism</th>
+							<th>What Modbus gets to assume</th>
+						</tr>
+						<tr>
+							<td><span class="cg">Delivery</span></td>
+							<td>Every byte is acknowledged (ACK). If an ACK doesn't come back in time, the sender retransmits.</td>
+							<td>"If <code>write()</code> returned success, the bytes will arrive — eventually." No retry loop in the Modbus layer.</td>
+						</tr>
+						<tr>
+							<td><span class="cb">Order</span></td>
+							<td>Every byte has a sequence number. The receiver buffers out-of-order bytes and reassembles in order.</td>
+							<td>"Byte N+1 will arrive after byte N, always." Modbus messages cannot get scrambled within a connection.</td>
+						</tr>
+						<tr>
+							<td><span class="cy">Integrity</span></td>
+							<td>Every TCP segment has a checksum over its payload. Corrupted segments are dropped silently and retransmitted.</td>
+							<td>"The bytes I receive equal the bytes the sender sent." This is exactly why Modbus TCP dropped the CRC.</td>
+						</tr>
+					</table>
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The one thing TCP does <em>not</em> give you</h2>
+
+			<p><strong>Message boundaries.</strong> This is the single most important property to internalize, and it's the one that catches every developer who builds their first protocol over TCP.</p>
+
+			<p>TCP is a <em>byte stream</em>. If the sender writes 12 bytes, the receiver may read them as: one block of 12, or two blocks of 6, or 12 blocks of 1, or one block of 8 and another of 4. If the sender writes two messages back-to-back, the receiver may read both halves in one chunk, or both messages in one chunk, or any combination.</p>
+
+			<p>This is not a bug. TCP is allowed to coalesce or split bytes however the network, OS buffers, and congestion control feel like. The application — Modbus, in our case — has to recover message boundaries on its own. That problem is the entire reason the MBAP header has a <code>Length</code> field, and it gets its own tab.</p>
+
+			<div class="callout warn">
+				<strong>Stream, not datagram.</strong> UDP gives you datagrams: write N bytes, read N bytes, end of story. TCP gives you a stream: write N bytes, read 1..N bytes, possibly multiple times. Confusing these two leads to bugs that work in the lab and fail in production.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Connection-oriented vs connectionless</h2>
+
+			<p>TCP is <strong>connection-oriented</strong>: before any bytes flow, the two endpoints perform a setup ritual (the three-way handshake) to agree they exist, agree on starting sequence numbers, and reserve buffer state in their respective OS kernels. Bytes only flow once both sides are in the <code>ESTABLISHED</code> state. When you're done, you tear down the connection cleanly (FIN/ACK exchange).</p>
+
+			<p>The practical implication for Modbus: opening a TCP connection isn't free. There's at least one full network round-trip before you can send a single Modbus request. Closing and re-opening per request would waste that round-trip every time. This is why <strong>the Modbus TCP specification recommends keeping the connection open</strong> across many requests — the next tab walks through the lifecycle.</p>
+		</div>
+
+		<div class="section">
+			<h2>Where TCP sits in the stack</h2>
+
+			<p>When you send a Modbus TCP request, your bytes are wrapped in headers all the way down the protocol stack, sent on the wire, then unwrapped in reverse on the other side. Each layer adds a fixed envelope and trusts the layer above to know what its own bytes mean:</p>
+
+			<div class="stack">
+				<div class="stack-row">
+					<div class="stack-label">Application</div>
+					<div class="stack-bar app">Modbus PDU — function code + data (1 + N bytes, max 253)</div>
+				</div>
+				<div class="stack-row">
+					<div class="stack-label">Modbus framing</div>
+					<div class="stack-bar modbus">+ MBAP header — Txn ID, Proto, Length, Unit (7 bytes)</div>
+				</div>
+				<div class="stack-row">
+					<div class="stack-label">Transport</div>
+					<div class="stack-bar tcp">+ TCP header — src/dst port, seq, ack, flags, window, checksum (20+ bytes)</div>
+				</div>
+				<div class="stack-row">
+					<div class="stack-label">Network</div>
+					<div class="stack-bar ip">+ IP header — src/dst IP, TTL, protocol=6 (20 bytes)</div>
+				</div>
+				<div class="stack-row">
+					<div class="stack-label">Link</div>
+					<div class="stack-bar eth">+ Ethernet frame — src/dst MAC, type=0x0800 (14 bytes + 4 byte FCS)</div>
+				</div>
+			</div>
+
+			<p>The pieces interesting to this page are the top two: Modbus PDU + MBAP. Everything below that is "TCP/IP gives me a reliable pipe" — but it's worth knowing the pipe is built from layers, because tools like Wireshark show you every layer and the failure mode at each is different.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: HANDSHAKE                                  -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-handshake">
+
+		<div class="section">
+			<h2>The three-way handshake</h2>
+
+			<p>Before any Modbus request can travel, the client and server must agree they're talking. TCP's setup is called the <strong>three-way handshake</strong> because it's exactly three segments: <code>SYN</code>, <code>SYN-ACK</code>, <code>ACK</code>. Its job is to synchronize sequence numbers on both sides and move both endpoints into the <code>ESTABLISHED</code> state.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">three-way handshake — opening a Modbus TCP connection</div>
+
+				<div class="seq-svg-wrap">
+					<svg viewBox="0 0 720 460" xmlns="http://www.w3.org/2000/svg">
+						<defs>
+							<marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+								<path d="M0 0L10 5L0 10Z" fill="#5c6380"/>
+							</marker>
+							<marker id="arr-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+								<path d="M0 0L10 5L0 10Z" fill="#4dc462"/>
+							</marker>
+						</defs>
+
+						<!-- Header labels: client / server -->
+						<rect x="60" y="12" width="180" height="36" rx="6" fill="#171b25" stroke="#232838"/>
+						<text x="150" y="30" text-anchor="middle" font-family="JetBrains Mono" font-size="12" font-weight="600" fill="#e2e6f0">Client (Master)</text>
+						<text x="150" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">10.0.0.5 : 54321</text>
+
+						<rect x="480" y="12" width="180" height="36" rx="6" fill="#171b25" stroke="#232838"/>
+						<text x="570" y="30" text-anchor="middle" font-family="JetBrains Mono" font-size="12" font-weight="600" fill="#e2e6f0">Server (Slave)</text>
+						<text x="570" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">10.0.0.42 : 502</text>
+
+						<!-- Lifelines -->
+						<line x1="150" y1="48" x2="150" y2="440" stroke="#232838" stroke-width="1" stroke-dasharray="3,3"/>
+						<line x1="570" y1="48" x2="570" y2="440" stroke="#232838" stroke-width="1" stroke-dasharray="3,3"/>
+
+						<!-- State markers -->
+						<rect x="105" y="60" width="90" height="20" rx="3" fill="#1d2230" stroke="#2f3650"/>
+						<text x="150" y="74" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#c8cee0">CLOSED</text>
+
+						<rect x="525" y="60" width="90" height="20" rx="3" fill="#1d2230" stroke="#2f3650"/>
+						<text x="570" y="74" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#c8cee0">LISTEN</text>
+
+						<!-- 1: SYN -->
+						<line x1="160" y1="105" x2="560" y2="135" stroke="#5c6380" stroke-width="1.5" marker-end="url(#arr)"/>
+						<text x="360" y="100" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#c084fc">1 · SYN</text>
+						<text x="360" y="118" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">seq=1000  flags=SYN</text>
+						<text x="360" y="132" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3b4058">"Hello, want to talk. My seq starts at 1000."</text>
+
+						<rect x="105" y="148" width="90" height="20" rx="3" fill="#1d2230" stroke="#2f3650"/>
+						<text x="150" y="162" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#c8cee0">SYN-SENT</text>
+
+						<!-- 2: SYN-ACK -->
+						<line x1="560" y1="185" x2="160" y2="215" stroke="#5c6380" stroke-width="1.5" marker-end="url(#arr)"/>
+						<text x="360" y="180" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#c084fc">2 · SYN-ACK</text>
+						<text x="360" y="198" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">seq=5000  ack=1001  flags=SYN,ACK</text>
+						<text x="360" y="212" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3b4058">"OK. My seq starts at 5000. I got your 1000."</text>
+
+						<rect x="525" y="148" width="90" height="20" rx="3" fill="#1d2230" stroke="#2f3650"/>
+						<text x="570" y="162" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#c8cee0">SYN-RCVD</text>
+
+						<!-- 3: ACK -->
+						<line x1="160" y1="265" x2="560" y2="295" stroke="#5c6380" stroke-width="1.5" marker-end="url(#arr)"/>
+						<text x="360" y="260" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#c084fc">3 · ACK</text>
+						<text x="360" y="278" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">seq=1001  ack=5001  flags=ACK</text>
+						<text x="360" y="292" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3b4058">"Got it. Ready."</text>
+
+						<rect x="100" y="305" width="100" height="20" rx="3" fill="#0f2818" stroke="#4dc462"/>
+						<text x="150" y="319" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#4dc462" font-weight="600">ESTABLISHED</text>
+
+						<rect x="520" y="305" width="100" height="20" rx="3" fill="#0f2818" stroke="#4dc462"/>
+						<text x="570" y="319" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#4dc462" font-weight="600">ESTABLISHED</text>
+
+						<!-- First data segment hint -->
+						<line x1="160" y1="365" x2="560" y2="380" stroke="#4dc462" stroke-width="1.5" marker-end="url(#arr-g)"/>
+						<text x="360" y="358" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#4dc462">first Modbus request</text>
+						<text x="360" y="395" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5c6380">seq=1001  PSH,ACK  payload=12 bytes (MBAP + PDU)</text>
+						<text x="360" y="411" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3b4058">"FC 04, read 2 input regs starting at addr 1"</text>
+
+						<!-- Time axis annotation -->
+						<text x="20" y="100" font-family="JetBrains Mono" font-size="9" fill="#3b4058" transform="rotate(-90 20 100)">time →</text>
+					</svg>
+				</div>
+
+				<div class="diagram-caption">
+					Each side picks a random <strong>initial sequence number</strong> (1000 and 5000 here for clarity — in reality they're 32-bit random values to prevent injection attacks). The <code>SYN</code> flag means "I'm proposing this initial seq." The <code>ACK</code> flag means "I have received bytes up to <code>ack</code>." After the third segment, both sides know each other's starting seq and the connection is open. The very first Modbus request can ride along immediately after — TCP doesn't impose an idle moment.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Why three segments and not two</h2>
+
+			<p>Two segments would be enough to <em>tell</em> each side the other's sequence number — but it wouldn't <em>confirm</em> that both sides actually received both numbers. The third <code>ACK</code> is the client confirming "yes, I received your SYN-ACK with your seq=5000." Without it, the server can't be sure the client is alive and ready; it would have to wait for the first data segment to find out, and stale connection state would accumulate from clients that vanished mid-handshake.</p>
+
+			<p>Three segments is the minimum number that lets each side both <em>send</em> and <em>confirm receipt of</em> an initial sequence number.</p>
+		</div>
+
+		<div class="section">
+			<h2>Tearing it down — four segments</h2>
+
+			<p>Closing is symmetric: each side sends a <code>FIN</code> ("I'm done sending") and receives an <code>ACK</code>. Because TCP is full-duplex — both directions are independent — each direction is closed separately. That's four segments total in the textbook case (though the middle two often piggyback into one).</p>
+
+			<div class="diagram">
+				<div class="diagram-title">connection teardown — FIN exchange</div>
+
+				<div class="seq-svg-wrap">
+					<svg viewBox="0 0 720 280" xmlns="http://www.w3.org/2000/svg">
+						<defs>
+							<marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+								<path d="M0 0L10 5L0 10Z" fill="#5c6380"/>
+							</marker>
+						</defs>
+
+						<text x="150" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#e2e6f0">Client</text>
+						<text x="570" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#e2e6f0">Server</text>
+
+						<line x1="150" y1="32" x2="150" y2="260" stroke="#232838" stroke-width="1" stroke-dasharray="3,3"/>
+						<line x1="570" y1="32" x2="570" y2="260" stroke="#232838" stroke-width="1" stroke-dasharray="3,3"/>
+
+						<line x1="160" y1="60" x2="560" y2="80" stroke="#5c6380" stroke-width="1.5" marker-end="url(#arr2)"/>
+						<text x="360" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#e8883a">1 · FIN</text>
+						<text x="360" y="76" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5c6380">"I'm done sending."</text>
+
+						<line x1="560" y1="115" x2="160" y2="130" stroke="#5c6380" stroke-width="1.5" marker-end="url(#arr2)"/>
+						<text x="360" y="110" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#e8883a">2 · ACK</text>
+						<text x="360" y="128" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5c6380">"Got your FIN."</text>
+
+						<line x1="560" y1="170" x2="160" y2="185" stroke="#5c6380" stroke-width="1.5" marker-end="url(#arr2)"/>
+						<text x="360" y="165" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#e8883a">3 · FIN</text>
+						<text x="360" y="183" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5c6380">"I'm done too."</text>
+
+						<line x1="160" y1="220" x2="560" y2="235" stroke="#5c6380" stroke-width="1.5" marker-end="url(#arr2)"/>
+						<text x="360" y="215" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#e8883a">4 · ACK</text>
+						<text x="360" y="233" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5c6380">"Got it. Connection closed."</text>
+					</svg>
+				</div>
+				<div class="diagram-caption">Either side can initiate close. After step 1, the closing side enters <code>FIN-WAIT</code> and can still receive data (only its send-direction is closed). The connection isn't fully gone until both directions have FIN'd.</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>What this costs, in time</h2>
+
+			<p>The three-way handshake costs <strong>one full network round-trip</strong> (RTT) before any application data flows. On a local Ethernet that's ≈0.1 ms — negligible. Over a slow industrial cellular link it might be 200 ms — significant if you'd been reconnecting per request.</p>
+
+			<p>This is the central reason the Modbus TCP spec recommends keeping the connection open. The handshake is cheap as a one-time setup, expensive as a per-transaction cost. A polling loop that opens, sends, reads, closes, repeat is wasting an RTT every cycle.</p>
+
+			<div class="callout">
+				<strong>Persistent connection, then.</strong> Open once at service startup. Send many Modbus requests. Reconnect only on error. Most Go Modbus libraries (<code>goburrow/modbus</code> for example) do this by default — you call <code>client.Connect()</code> once, and the underlying TCP socket stays open across many reads.
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: STREAM → MESSAGES                          -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-framing">
+
+		<div class="section">
+			<h2>The core mismatch</h2>
+
+			<p>Modbus is fundamentally a <strong>message-oriented</strong> protocol: a request is a discrete thing, a response is a discrete thing, and the boundary between them matters. TCP is fundamentally a <strong>stream-oriented</strong> protocol: bytes flow, and no one promises that "what I read in one <code>recv()</code> call is what you wrote in one <code>send()</code> call."</p>
+
+			<p>Two things can happen on the receiver side that catch new TCP programmers off guard:</p>
+
+			<div class="diagram">
+				<div class="diagram-title">scenario A — message split across two reads</div>
+				<div class="codeblock"><span style="color:var(--text-dim);">// Sender does ONE write of 12 bytes (one Modbus request)</span>
+write(sock, [00 01 00 00 00 06 01 04 00 01 00 02], 12)
+
+<span style="color:var(--text-dim);">// Receiver does TWO reads:</span>
+read(sock, buf, 1024) → returns 7 bytes:  [00 01 00 00 00 06 01]
+read(sock, buf, 1024) → returns 5 bytes:  [04 00 01 00 02]
+</div>
+				<div class="diagram-caption">The OS chose to split delivery. Maybe a packet was dropped and retransmitted with only part of the data. Maybe the network MTU forced two IP packets. Maybe the receiver's buffer was momentarily small. None of these are bugs; all are normal TCP behavior. The receiver code must <strong>concatenate and parse</strong>, not assume one read = one message.</div>
+			</div>
+
+			<div class="diagram">
+				<div class="diagram-title">scenario B — two messages merged into one read</div>
+				<div class="codeblock"><span style="color:var(--text-dim);">// Sender does TWO writes back-to-back (two Modbus requests)</span>
+write(sock, [00 01 00 00 00 06 01 04 00 01 00 02], 12)
+write(sock, [00 02 00 00 00 06 01 03 00 00 00 04], 12)
+
+<span style="color:var(--text-dim);">// Receiver does ONE read:</span>
+read(sock, buf, 1024) → returns 24 bytes:
+  [00 01 00 00 00 06 01 04 00 01 00 02 00 02 00 00 00 06 01 03 00 00 00 04]
+   └────────── message 1 ──────────┘└────────── message 2 ──────────┘</div>
+				<div class="diagram-caption">Nagle's algorithm, OS write-buffer batching, or just a fast sender — any of these can pack two logical messages into one TCP segment and hand them to <code>recv()</code> as one chunk. The receiver code must <strong>find the boundaries</strong>, not assume one read = one message.</div>
+			</div>
+
+			<p>The receiver, in other words, needs a way to look at a buffer of bytes and answer: "is there a complete message here yet, and if so, where does it end?" That's <strong>framing</strong>, and it's the Modbus layer's job.</p>
+		</div>
+
+		<div class="section">
+			<h2>How to frame messages in a stream — two strategies</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Strategy</th>
+						<th>How</th>
+						<th>Used by</th>
+						<th>Tradeoff</th>
+					</tr>
+					<tr>
+						<td>Delimiter</td>
+						<td>Read until you see a special byte (e.g. <code>\n</code>) — that byte ends the message.</td>
+						<td>HTTP/1, IRC, SMTP, line-based protocols</td>
+						<td>Simple, but fragile if message bodies can contain the delimiter — you need escaping.</td>
+					</tr>
+					<tr>
+						<td><strong>Length prefix</strong></td>
+						<td>Each message starts with a fixed-size field giving the byte length of the rest.</td>
+						<td><strong>Modbus TCP</strong>, gRPC, most binary protocols</td>
+						<td>Robust — body can contain any bytes. Requires reading a small fixed header first to know how much to read next.</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Modbus chose length prefix. The MBAP header carries a <code>Length</code> field whose entire job is to tell the receiver: "after this header, there are N more bytes that complete the current message."</p>
+		</div>
+
+		<div class="section">
+			<h2>The MBAP Length field in action</h2>
+
+			<p>Reminder of the MBAP header layout (already covered on the previous Modbus page — included here only so the field positions are visible):</p>
+
+			<div class="diagram">
+				<div class="diagram-title">MBAP header — 7 bytes</div>
+
+				<div style="overflow-x: auto;">
+					<div class="frame">
+						<div class="fcell mbap">
+							<div class="fc-label">Txn ID</div>
+							<div class="fc-val">00 01</div>
+							<div class="fc-sz">2 bytes</div>
+						</div>
+						<div class="fcell mbap">
+							<div class="fc-label">Proto</div>
+							<div class="fc-val">00 00</div>
+							<div class="fc-sz">2 bytes</div>
+						</div>
+						<div class="fcell mbap" style="border-color:rgba(232, 184, 52, 0.7); background:rgba(232, 184, 52, 0.14);">
+							<div class="fc-label" style="color:var(--c1);">Length</div>
+							<div class="fc-val" style="color:var(--c1);">00 06</div>
+							<div class="fc-sz">2 bytes ← framing</div>
+						</div>
+						<div class="fcell mbap">
+							<div class="fc-label">Unit</div>
+							<div class="fc-val">01</div>
+							<div class="fc-sz">1 byte</div>
+						</div>
+						<div class="fcell pdu">
+							<div class="fc-label">FC + Data</div>
+							<div class="fc-val">04 00 01 00 02</div>
+							<div class="fc-sz">N bytes</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					<strong>The Length field counts every byte that follows it</strong> — the Unit byte plus the entire PDU. In this example: Unit (1) + PDU (5) = 6, so Length = <code>0x0006</code>.
+					Critically, the first 6 bytes of every Modbus TCP message are at <em>fixed offsets</em>: you always know where Length lives. That's what makes the framing algorithm possible.
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>The receive loop, every Modbus client implements something like this</h2>
+
+			<div class="codeblock"><span style="color:var(--text-dim);">// Pseudocode — buffer-and-parse loop over a TCP socket</span>
+
+buf = []                              <span style="color:var(--text-dim);">// growing byte buffer</span>
+
+<span style="color:var(--accent2);">loop</span> {
+    n = read(sock, tmp, 1024)
+    buf.append(tmp[0:n])
+
+    <span style="color:var(--accent2);">loop</span> {                            <span style="color:var(--text-dim);">// drain as many complete messages as we have</span>
+        <span style="color:var(--accent2);">if</span> len(buf) &lt; 8 { <span style="color:var(--accent2);">break</span> }     <span style="color:var(--text-dim);">// not enough for MBAP header (7) + 1 FC byte</span>
+
+        length = read_u16_be(buf[4:6]) <span style="color:var(--text-dim);">// Length field at fixed offset 4..5</span>
+        total  = 6 + length            <span style="color:var(--text-dim);">// 6 bytes before Length + Length-counted bytes</span>
+
+        <span style="color:var(--accent2);">if</span> len(buf) &lt; total { <span style="color:var(--accent2);">break</span> }  <span style="color:var(--text-dim);">// still waiting for the rest of this message</span>
+
+        message = buf[0:total]
+        process(message)               <span style="color:var(--text-dim);">// hand one complete ADU upward</span>
+        buf = buf[total:]              <span style="color:var(--text-dim);">// keep any leftover bytes for next iteration</span>
+    }
+}
+</div>
+
+			<p>Two ideas worth pulling out:</p>
+
+			<p>1. <strong>The inner loop runs <em>as many times as there are complete messages in the buffer</em>.</strong> If two messages arrived merged (scenario B above), the inner loop runs twice on a single <code>read()</code>. If a message is split across reads (scenario A), the inner loop breaks early and the outer loop reads more bytes before trying again. Either case is handled by the same code.</p>
+
+			<p>2. <strong>You can read the Length field as soon as you have 6 bytes, but the full message isn't there until you have <code>6 + length</code> bytes.</strong> This is why the header field has to come first and has to be at a fixed offset. If Length were a variable-length field (like in some other protocols), framing would be a chicken-and-egg problem.</p>
+
+			<div class="callout">
+				<strong>Most Go Modbus libraries do this for you.</strong> You'll call something like <code>client.ReadInputRegisters(addr, qty)</code> and the library hides the buffer/parse loop. But knowing it's there matters: if you ever debug a hang or a malformed-frame error, the bug is almost always in this loop or in something upstream feeding it bytes incorrectly.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Why this design eliminates serial Modbus's silence-based framing</h2>
+
+			<p>On RS-485, Modbus RTU has no length field. Frames are bounded by <strong>3.5 character-times of bus silence</strong> before and after — if there's idle time, the frame is over. That works on a serial wire where you control the timing precisely.</p>
+
+			<p>It doesn't work on TCP at all, because TCP is allowed to introduce arbitrary delays. A 50 ms pause between two halves of a write would falsely terminate a frame under silence-based framing. The Length field is the explicit, timing-independent replacement: the message ends when you've read N bytes, not when the wire goes quiet.</p>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: FULL CONVERSATION                          -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-conversation">
+
+		<div class="section">
+			<h2>End-to-end: one Modbus poll cycle, every layer visible</h2>
+
+			<p>Putting it all together. Here's what happens from "client wants to read two cell voltages" to "client has two integers in memory," with every TCP segment annotated.</p>
+
+			<div class="diagram">
+				<div class="diagram-title">one full polling cycle on a fresh connection</div>
+
+				<div class="seq-svg-wrap">
+					<svg viewBox="0 0 720 620" xmlns="http://www.w3.org/2000/svg">
+						<defs>
+							<marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+								<path d="M0 0L10 5L0 10Z" fill="#5c6380"/>
+							</marker>
+							<marker id="arr3g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+								<path d="M0 0L10 5L0 10Z" fill="#4dc462"/>
+							</marker>
+							<marker id="arr3b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+								<path d="M0 0L10 5L0 10Z" fill="#3d9be8"/>
+							</marker>
+						</defs>
+
+						<text x="150" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#e2e6f0">Client</text>
+						<text x="570" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#e2e6f0">Server</text>
+
+						<line x1="150" y1="32" x2="150" y2="600" stroke="#232838" stroke-width="1" stroke-dasharray="3,3"/>
+						<line x1="570" y1="32" x2="570" y2="600" stroke="#232838" stroke-width="1" stroke-dasharray="3,3"/>
+
+						<!-- Phase: handshake -->
+						<rect x="10" y="50" width="60" height="80" rx="4" fill="#1d2230" stroke="#2f3650"/>
+						<text x="40" y="80" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#c084fc" font-weight="600">setup</text>
+						<text x="40" y="94" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">3-way</text>
+						<text x="40" y="106" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">hand-</text>
+						<text x="40" y="118" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">shake</text>
+
+						<line x1="160" y1="65" x2="560" y2="75" stroke="#5c6380" stroke-width="1.2" marker-end="url(#arr3)"/>
+						<text x="360" y="62" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#c084fc">SYN</text>
+
+						<line x1="560" y1="92" x2="160" y2="102" stroke="#5c6380" stroke-width="1.2" marker-end="url(#arr3)"/>
+						<text x="360" y="89" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#c084fc">SYN-ACK</text>
+
+						<line x1="160" y1="119" x2="560" y2="129" stroke="#5c6380" stroke-width="1.2" marker-end="url(#arr3)"/>
+						<text x="360" y="116" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#c084fc">ACK</text>
+
+						<line x1="80" y1="138" x2="640" y2="138" stroke="#232838" stroke-width="0.5"/>
+
+						<!-- Phase: request -->
+						<rect x="10" y="155" width="60" height="100" rx="4" fill="#1d2230" stroke="#2f3650"/>
+						<text x="40" y="185" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#4dc462" font-weight="600">request</text>
+						<text x="40" y="200" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">FC 04</text>
+						<text x="40" y="212" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">read 2</text>
+						<text x="40" y="224" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">regs</text>
+						<text x="40" y="240" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">@ addr 1</text>
+
+						<line x1="160" y1="175" x2="560" y2="195" stroke="#4dc462" stroke-width="1.8" marker-end="url(#arr3g)"/>
+						<text x="360" y="170" text-anchor="middle" font-family="JetBrains Mono" font-size="10" font-weight="600" fill="#4dc462">PSH,ACK + 12 bytes</text>
+						<text x="360" y="190" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5c6380">00 01 · 00 00 · 00 06 · 01 · 04 · 00 01 · 00 02</text>
+						<text x="360" y="206" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3b4058">Txn=1   Proto   Len=6   Unit  FC   Addr   Qty</text>
+
+						<line x1="560" y1="232" x2="160" y2="242" stroke="#5c6380" stroke-width="0.8" marker-end="url(#arr3)" stroke-dasharray="2,2"/>
+						<text x="360" y="228" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5c6380">bare ACK (no payload — TCP confirms receipt)</text>
+
+						<line x1="80" y1="265" x2="640" y2="265" stroke="#232838" stroke-width="0.5"/>
+
+						<!-- Server processing -->
+						<rect x="475" y="278" width="190" height="22" rx="3" fill="#1d2230" stroke="#2f3650"/>
+						<text x="570" y="293" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#c8cee0">slave reads its own registers</text>
+
+						<!-- Phase: response -->
+						<rect x="10" y="315" width="60" height="100" rx="4" fill="#1d2230" stroke="#2f3650"/>
+						<text x="40" y="345" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3d9be8" font-weight="600">response</text>
+						<text x="40" y="360" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">echo Txn</text>
+						<text x="40" y="372" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">+ 4 bytes</text>
+						<text x="40" y="384" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">of data</text>
+						<text x="40" y="400" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">(2 regs)</text>
+
+						<line x1="560" y1="335" x2="160" y2="355" stroke="#3d9be8" stroke-width="1.8" marker-end="url(#arr3b)"/>
+						<text x="360" y="330" text-anchor="middle" font-family="JetBrains Mono" font-size="10" font-weight="600" fill="#3d9be8">PSH,ACK + 13 bytes</text>
+						<text x="360" y="350" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5c6380">00 01 · 00 00 · 00 07 · 01 · 04 · 04 · 0D AC · 0D B0</text>
+						<text x="360" y="366" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3b4058">Txn=1   Proto   Len=7   Unit  FC   BC  reg1   reg2</text>
+
+						<line x1="160" y1="385" x2="560" y2="395" stroke="#5c6380" stroke-width="0.8" marker-end="url(#arr3)" stroke-dasharray="2,2"/>
+						<text x="360" y="381" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5c6380">bare ACK</text>
+
+						<line x1="80" y1="418" x2="640" y2="418" stroke="#232838" stroke-width="0.5"/>
+
+						<!-- Phase: more or idle -->
+						<rect x="10" y="435" width="60" height="80" rx="4" fill="#1d2230" stroke="#2f3650"/>
+						<text x="40" y="465" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#e8b834" font-weight="600">idle /</text>
+						<text x="40" y="477" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#e8b834" font-weight="600">poll</text>
+						<text x="40" y="490" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">connection</text>
+						<text x="40" y="502" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">stays open</text>
+
+						<text x="360" y="460" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5c6380" font-style="italic">…wait for next poll interval…</text>
+						<line x1="160" y1="475" x2="560" y2="485" stroke="#4dc462" stroke-width="1.4" marker-end="url(#arr3g)"/>
+						<text x="360" y="495" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5c6380">next request — Txn=2 (no new handshake)</text>
+
+						<line x1="80" y1="518" x2="640" y2="518" stroke="#232838" stroke-width="0.5"/>
+
+						<!-- Phase: close -->
+						<rect x="10" y="535" width="60" height="60" rx="4" fill="#1d2230" stroke="#2f3650"/>
+						<text x="40" y="565" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#e8883a" font-weight="600">close</text>
+						<text x="40" y="580" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#5c6380">(later)</text>
+
+						<line x1="160" y1="555" x2="560" y2="565" stroke="#5c6380" stroke-width="1.2" marker-end="url(#arr3)"/>
+						<text x="360" y="552" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#e8883a">FIN, FIN-ACK, FIN, ACK (4-way teardown)</text>
+					</svg>
+				</div>
+
+				<div class="diagram-caption">
+					The TCP layer is doing real work — every Modbus segment is acknowledged, the seq/ack numbers are advancing, the connection state is being maintained — but from the Modbus application's point of view it's just "write request, read response, repeat."
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Where each layer's responsibility ends</h2>
+
+			<div class="diagram">
+				<div class="diagram-title">a 12-byte Modbus request, wrapped in everything below it</div>
+
+				<div style="overflow-x: auto;">
+					<div class="frame">
+						<div class="fcell" style="background:rgba(240,101,101,0.07); border:1px solid rgba(240,101,101,0.22);">
+							<div class="fc-label" style="color:var(--byte0);">Eth hdr</div>
+							<div class="fc-val" style="color:var(--byte0);">14 B</div>
+							<div class="fc-sz">MAC src/dst, type</div>
+						</div>
+						<div class="fcell" style="background:rgba(77,196,98,0.07); border:1px solid rgba(77,196,98,0.22);">
+							<div class="fc-label" style="color:var(--byte1);">IP hdr</div>
+							<div class="fc-val" style="color:var(--byte1);">20 B</div>
+							<div class="fc-sz">IP src/dst, TTL</div>
+						</div>
+						<div class="fcell tcp">
+							<div class="fc-label" style="color:var(--accent2);">TCP hdr</div>
+							<div class="fc-val" style="color:var(--accent2);">20 B</div>
+							<div class="fc-sz">ports, seq, ack, ck</div>
+						</div>
+						<div class="fcell mbap">
+							<div class="fc-label">MBAP</div>
+							<div class="fc-val">7 B</div>
+							<div class="fc-sz">Txn, Proto, Len, Unit</div>
+						</div>
+						<div class="fcell pdu">
+							<div class="fc-label">PDU</div>
+							<div class="fc-val">5 B</div>
+							<div class="fc-sz">FC + addr + qty</div>
+						</div>
+						<div class="fcell" style="background:rgba(240,101,101,0.07); border:1px solid rgba(240,101,101,0.22);">
+							<div class="fc-label" style="color:var(--byte0);">Eth FCS</div>
+							<div class="fc-val" style="color:var(--byte0);">4 B</div>
+							<div class="fc-sz">link-layer CRC</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="diagram-caption">
+					The Modbus request is 12 bytes (MBAP + PDU). To put it on the wire takes 58 bytes of headers/trailers below it — a ~5x overhead for a single short request. (This is why protocols designed for tight industrial loops sometimes batch many register reads per request.)
+				</div>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Why no CRC at the Modbus layer</h2>
+
+			<p>This is one of the cleanest examples of "trust the layer below." Each layer in the diagram above is already checking integrity:</p>
+
+			<ul style="padding-left:22px; margin-bottom: 14px;">
+				<li style="margin-bottom: 6px;"><strong class="cr">Ethernet</strong> appends a 4-byte <strong>FCS</strong> (Frame Check Sequence — CRC-32) to every frame. Corrupted frames are dropped by the NIC before they reach the kernel.</li>
+				<li style="margin-bottom: 6px;"><strong class="cg">IP</strong> has its own header checksum (covers only the IP header, but that's enough to prevent misrouting).</li>
+				<li><strong class="cp">TCP</strong> has a checksum covering its header <em>and</em> its payload. A corrupted TCP segment fails the checksum, gets silently dropped, isn't ACKed, and the sender retransmits.</li>
+			</ul>
+
+			<p>By the time bytes reach the Modbus layer, they have already survived three independent integrity checks. Adding a fourth (a Modbus-level CRC) would catch essentially nothing the lower layers missed — it would only protect against bugs inside the OS networking stack or inside the Modbus library itself, which is a far weirder failure mode than wire corruption.</p>
+
+			<p>So Modbus TCP dropped the CRC. Modbus RTU keeps it because on a raw RS-485 wire there <em>are</em> no lower layers — the analog wire is naked, and the CRC is your only line of defense.</p>
+
+			<div class="callout">
+				<strong>The principle here is worth keeping.</strong> When you design a protocol that runs over TCP, don't redo work TCP already does. No CRCs, no retry logic, no sequence numbers (TCP has them), no keep-alives at the application layer unless you genuinely need to detect "the other side's app crashed but its TCP stack is still alive" (which is sometimes real — see the Notes tab).
+			</div>
+		</div>
+
+	</div>
+
+	<!-- ════════════════════════════════════════════════ -->
+	<!-- TAB: NOTES & GOTCHAS                            -->
+	<!-- ════════════════════════════════════════════════ -->
+	<div class="tab-panel" id="tab-notes">
+
+		<div class="section">
+			<h2>Port 502 — and why it's special</h2>
+
+			<p>Modbus TCP servers listen on <strong>TCP port 502</strong>, registered with IANA specifically for Modbus. The client side uses an ephemeral port assigned by its OS (typically 32768–60999 on Linux). The server's port is fixed so that clients, firewalls, and management tools can identify Modbus traffic by inspection.</p>
+
+			<p>Some devices expose configurable ports (5020, 5021, 8502 are common alternatives, useful when one host serves multiple Modbus endpoints). Changing the port doesn't add security in any real sense — it just makes the service less discoverable to lazy scans. The Modbus Organization's <strong>Modbus/TCP Security</strong> profile, which adds TLS, uses port 802.</p>
+		</div>
+
+		<div class="section">
+			<h2>Connection limits on slaves</h2>
+
+			<p>Modbus servers — especially embedded BMS, PLCs, energy meters — usually have a hard cap on simultaneous TCP connections, often <strong>1, 2, 4, or 8</strong>. This is a firmware constraint, not a protocol one. If you try to open a fifth connection to a device with a cap of 4, the device either refuses the connection or (worse) silently drops one of the existing ones.</p>
+
+			<p>The symptom is mysterious intermittent failures when multiple polling services touch the same device. The fix: <strong>one master per device</strong>, fan out internally to consumers. For the BMS in this assignment, that's exactly the architecture — one Go service holds the Modbus connection, HTTP handlers share the in-memory state.</p>
+		</div>
+
+		<div class="section">
+			<h2>Persistent connection, but be ready to reconnect</h2>
+
+			<p>The spec recommends keeping the TCP connection open, but networks fail. The connection can die at any moment for any of these reasons:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Cause</th>
+						<th>How the client finds out</th>
+					</tr>
+					<tr>
+						<td>Server reboots / restarts service</td>
+						<td>RST segment, or socket read returns 0 bytes (clean FIN)</td>
+					</tr>
+					<tr>
+						<td>Network outage / cable unplug</td>
+						<td>Eventually — TCP retransmits silently for ~15 min before giving up</td>
+					</tr>
+					<tr>
+						<td>NAT/firewall idle timeout</td>
+						<td>Connection "works" until next write, then RST or silent black hole</td>
+					</tr>
+					<tr>
+						<td>Server connection-limit eviction</td>
+						<td>Usually RST</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>The polling loop has to treat "read failed" as a normal event: close the socket, sleep briefly, reconnect, resume. A Modbus service that hangs for 15 minutes because TCP is still in its retransmit-and-hope phase is a service that's failing in production.</p>
+
+			<div class="callout warn">
+				<strong>Per-operation read timeouts</strong> are the standard mitigation. Set a deadline (1–5 s typically) on every Modbus read; if it expires, treat it as a connection-level failure and reconnect. Most Modbus libraries expose this as a <code>Timeout</code> field on the client.
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Transaction ID — what it actually enables</h2>
+
+			<p>The 2-byte Txn ID at the start of the MBAP header is echoed unchanged from request to response. Its purpose is to <strong>match responses to requests when multiple are in flight</strong> on the same connection.</p>
+
+			<p>On classic serial Modbus this didn't matter — one in-flight request per bus, by physics. On TCP you <em>could</em> pipeline: send request 1, send request 2, then receive response 1, then response 2 — possibly even response 2 before response 1 if the server is parallelized. The Txn ID lets the client demultiplex.</p>
+
+			<p>In practice most clients are still strict request/response (send, wait for response, send next). But:</p>
+			<ul style="padding-left:22px; margin-bottom:14px;">
+				<li style="margin-bottom: 6px;">Even in strict mode, the Txn ID catches the case where a delayed response from a previous request arrives after a timeout — if the Txn ID doesn't match the expected one, the response is discarded.</li>
+				<li>It's how the client knows a response is for <em>this</em> request and not a stale leftover.</li>
+			</ul>
+
+			<p>Typical implementation: start a counter at 0 (or random), increment per request, wrap at 65535.</p>
+		</div>
+
+		<div class="section">
+			<h2>Nagle, delayed-ACK, and polling latency</h2>
+
+			<p>Two TCP optimizations can hurt low-latency request/response patterns like Modbus polling:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Mechanism</th>
+						<th>What it does</th>
+						<th>Effect on Modbus</th>
+					</tr>
+					<tr>
+						<td><strong>Nagle's algorithm</strong></td>
+						<td>Delays small writes briefly, hoping to coalesce with the next write into one segment.</td>
+						<td>Small Modbus request might wait 40 ms before being sent if Nagle thinks more bytes are coming.</td>
+					</tr>
+					<tr>
+						<td><strong>Delayed ACK</strong></td>
+						<td>Receiver waits ~40 ms before ACKing, hoping to piggyback the ACK on outgoing data.</td>
+						<td>If both sides have these on, you can get the "Nagle/delayed-ACK interaction" — ~200 ms stalls on short request/response sequences.</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>For Modbus polling, the standard fix is <code>TCP_NODELAY</code> on the client socket — disables Nagle, sends every write immediately. Most Modbus libraries set this for you. If you're seeing weird ~40 ms or ~200 ms stalls between request and response that go away under load, this is the suspect.</p>
+		</div>
+
+		<div class="section">
+			<h2>Size limits</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Limit</th>
+						<th>Value</th>
+						<th>Why</th>
+					</tr>
+					<tr>
+						<td>Max PDU</td>
+						<td>253 bytes</td>
+						<td>Inherited from serial Modbus (max RTU frame 256 = 1 addr + 253 PDU + 2 CRC)</td>
+					</tr>
+					<tr>
+						<td>Max MBAP + PDU (ADU)</td>
+						<td>260 bytes</td>
+						<td>7-byte MBAP + 253-byte PDU</td>
+					</tr>
+					<tr>
+						<td>Max input/holding registers per read</td>
+						<td>125</td>
+						<td>2 bytes per register, plus byte-count header, must fit in PDU</td>
+					</tr>
+					<tr>
+						<td>Max coils/discrete inputs per read</td>
+						<td>2000</td>
+						<td>Packed 8 per byte, plus byte-count header, must fit in PDU</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>For the BMS work, 125 registers per <code>FC 04</code> is plenty — the whole register map is far smaller.</p>
+		</div>
+
+		<div class="section">
+			<h2>Cheat sheet — what each layer owns</h2>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Layer</th>
+						<th>Owns</th>
+						<th>Modbus assumes</th>
+					</tr>
+					<tr>
+						<td>Ethernet</td>
+						<td>Frame delivery on a LAN segment, CRC-32 (FCS)</td>
+						<td>Bytes that survive get to the IP layer intact</td>
+					</tr>
+					<tr>
+						<td>IP</td>
+						<td>Routing across networks, fragmentation</td>
+						<td>Packets eventually get to the right host</td>
+					</tr>
+					<tr>
+						<td>TCP</td>
+						<td>Reliability, ordering, integrity, flow control, framing-as-stream</td>
+						<td>Bytes written on one end emerge in order, intact, on the other</td>
+					</tr>
+					<tr>
+						<td>MBAP</td>
+						<td>Message framing (Length), transaction matching (Txn ID), slave addressing within a unit (Unit ID)</td>
+						<td>The client and server agree on which bytes belong to which Modbus message</td>
+					</tr>
+					<tr>
+						<td>Modbus PDU</td>
+						<td>What to do (FC) and to what (address, quantity, values)</td>
+						<td>—</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+
+		<div class="section">
+			<h2>Debugging mental model</h2>
+
+			<p>When something goes wrong with Modbus TCP, the diagnostic question is <em>which layer</em>. Rough triage:</p>
+
+			<div class="tbl-wrap">
+				<table>
+					<tr>
+						<th>Symptom</th>
+						<th>Likely layer</th>
+						<th>Tool</th>
+					</tr>
+					<tr>
+						<td>Connection refused immediately</td>
+						<td>TCP — server not listening / wrong port / firewall</td>
+						<td><code>nc -v host 502</code></td>
+					</tr>
+					<tr>
+						<td>Connection accepted, then RST</td>
+						<td>TCP — server's connection limit hit, or wrong protocol on port</td>
+						<td>Wireshark; check server connection count</td>
+					</tr>
+					<tr>
+						<td>Connect OK, request sent, no response</td>
+						<td>Modbus — server got bytes but couldn't parse, or device is hung</td>
+						<td>Wireshark (Modbus dissector); check server logs</td>
+					</tr>
+					<tr>
+						<td>Exception response (FC | 0x80)</td>
+						<td>Modbus — bad address, illegal function, etc.</td>
+						<td>Read the exception code; it's in the response</td>
+					</tr>
+					<tr>
+						<td>Wrong values</td>
+						<td>Modbus — endianness, signed-vs-unsigned, register-map misread</td>
+						<td>Cross-check decode against the device spec sheet</td>
+					</tr>
+					<tr>
+						<td>Intermittent timeouts</td>
+						<td>TCP — NAT timeout, flaky link, or device firmware</td>
+						<td>Wireshark + packet capture over time</td>
+					</tr>
+				</table>
+			</div>
+
+			<p>Wireshark has a built-in Modbus TCP dissector that decodes every field of the MBAP header and PDU. On a debugging-resistant problem, capturing 30 seconds of traffic and reading it in Wireshark tells you more than reading source code does.</p>
+		</div>
+
+	</div>
+
+</div>
+
+<script>
+	document.querySelectorAll('.tab-btn').forEach(btn => {
+		btn.addEventListener('click', () => {
+			document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+			document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+			btn.classList.add('active');
+			document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+		});
+	});
+</script>
+</body>
+</html>
